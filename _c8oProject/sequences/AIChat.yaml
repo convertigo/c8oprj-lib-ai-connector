@@ -3,7 +3,7 @@ comment: |
   
   Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider''s lib_AIConnector symbol), base_url (openai provider only), file (optional multipart upload: image or PDF), file_type (optional MIME type, guessed from the extension when empty).
   
-  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. With a file, the user content becomes multimodal (image or PDF blocks + text); Mistral supports images only (use a vision model such as pixtral-12b-2409 or mistral-medium-latest). The answer shape follows the target provider.'
+  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. Uploaded files go through the provider Files APIs (binary multipart uploads, no base64 for documents in the chat requests): OpenAI uploads PDFs to /v1/files (purpose user_data) and references file_id in the message; Anthropic uploads PDFs to its Files API (beta) and references file_id; Gemini uses the resumable Files API and references the file URI (images and PDFs); Mistral uploads PDFs with purpose ocr, extracts text through POST /v1/ocr and feeds it to the chat. Images stay inline base64 data URLs on providers whose chat API accepts no image file reference (OpenAI, Anthropic, Mistral). The answer shape follows the target provider.'
 ↓If_openai [steps.IfStep-1791566493053]: 
   comment: 'provider openai (default): calls ChatCompletion (any OpenAI-compatible endpoint).'
   condition: String(provider || 'openai').toLowerCase() == 'openai'

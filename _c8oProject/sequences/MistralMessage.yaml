@@ -5,10 +5,11 @@ comment: |
   
   Returns the provider response document (choices[0].message.content holds the answer).'
 ↓prepare [steps.SimpleStep-1791566386616]: 
-  comment: 'Builds the Mistral chat/completions request: messages (system + multimodal user content), Bearer Authorization header, model (default mistral-large-latest). Images are inlined as base64 data URLs (PDF is not supported inline by Mistral chat completions).'
+  comment: 'Builds the Mistral chat/completions request. PDFs go through the Mistral Files API (purpose=ocr), then text extraction with POST /v1/ocr (mistral-ocr-latest, document_url pointing to the signed file URL): the chat request carries only text. Images stay inline base64 data URLs (vision models only).'
   expression: |
     '// Builds the Mistral /v1/chat/completions request.
-    // Variables: prompt (required), model, system, temperature, max_tokens, api_key, file (optional), file_type (optional).
+    // PDFs: Files API upload (purpose=ocr) + signed URL + POST /v1/ocr extraction. Images: inline base64 (vision models only).
+    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
     var key = String(api_key || '''').trim();
     var auth;
     if (key == '''') {
@@ -26,21 +27,83 @@ comment: |
     if (fp == '''') {
       uc = String(prompt);
     } else {
-      var fis = new java.io.FileInputStream(fp);
-      var bos = new java.io.ByteArrayOutputStream();
-      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var n;
-      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
-      fis.close();
-      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
       var mime = String(file_type || '''').trim();
       if (mime == '''') {
         var ext = fp.toLowerCase().replace(/.*\./, '''');
-        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ''image/png'';
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      uc = [];
-      uc.push({ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } });
-      uc.push({ type: ''text'', text: String(prompt) });
+      var fname = String(new java.io.File(fp).getName());
+      var fbos = new java.io.ByteArrayOutputStream();
+      var ffis = new java.io.FileInputStream(fp);
+      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var fn;
+      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
+      ffis.close();
+      var fbytes = fbos.toByteArray();
+      if (mime == ''application/pdf'') {
+        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
+        var bos = new java.io.ByteArrayOutputStream();
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nocr\r\n''));
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
+        bos.write(fbytes);
+        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
+        var conn = new java.net.URL(''https://api.mistral.ai/v1/files'').openConnection();
+        conn.setRequestMethod(''POST'');
+        conn.setDoOutput(true);
+        conn.setRequestProperty(''Authorization'', auth);
+        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
+        conn.setFixedLengthStreamingMode(bos.size());
+        var os = conn.getOutputStream();
+        os.write(bos.toByteArray()); os.flush(); os.close();
+        var fcode = conn.getResponseCode();
+        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
+        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
+        var sb = new java.lang.StringBuilder();
+        var ln;
+        while ((ln = rd.readLine()) != null) { sb.append(ln); }
+        rd.close();
+        var fres = String(sb.toString());
+        if (fcode < 200 || fcode >= 300) { throw new Error(''Mistral Files upload failed (HTTP '' + fcode + ''): '' + fres); }
+        var fileId = String(JSON.parse(fres).id);
+        var cu = new java.net.URL(''https://api.mistral.ai/v1/files/'' + fileId + ''/url'').openConnection();
+        cu.setRequestProperty(''Authorization'', auth);
+        var curd = new java.io.BufferedReader(new java.io.InputStreamReader(cu.getInputStream(), ''UTF-8''));
+        var cusb = new java.lang.StringBuilder();
+        var culn;
+        while ((culn = curd.readLine()) != null) { cusb.append(culn); }
+        curd.close();
+        var signedUrl = String(JSON.parse(String(cusb.toString())).url);
+        var ocrBody = JSON.stringify({ model: ''mistral-ocr-latest'', document: { type: ''document_url'', document_url: signedUrl } });
+        var conn2 = new java.net.URL(''https://api.mistral.ai/v1/ocr'').openConnection();
+        conn2.setRequestMethod(''POST'');
+        conn2.setDoOutput(true);
+        conn2.setRequestProperty(''Authorization'', auth);
+        conn2.setRequestProperty(''Content-Type'', ''application/json'');
+        var ob = J(ocrBody);
+        conn2.setFixedLengthStreamingMode(ob.length);
+        var os2 = conn2.getOutputStream();
+        os2.write(ob); os2.flush(); os2.close();
+        var ocode = conn2.getResponseCode();
+        var ris2 = (ocode >= 200 && ocode < 300) ? conn2.getInputStream() : conn2.getErrorStream();
+        var rd2 = new java.io.BufferedReader(new java.io.InputStreamReader(ris2, ''UTF-8''));
+        var sb2 = new java.lang.StringBuilder();
+        var ln2;
+        while ((ln2 = rd2.readLine()) != null) { sb2.append(ln2); }
+        rd2.close();
+        var ores = String(sb2.toString());
+        if (ocode < 200 || ocode >= 300) { throw new Error(''Mistral OCR failed (HTTP '' + ocode + ''): '' + ores); }
+        var md = '''';
+        try {
+          var pj = JSON.parse(ores);
+          if (pj.pages != null) {
+            for (var pi = 0; pi < pj.pages.length; pi++) { md += String(pj.pages[pi].markdown) + ''\n\n''; }
+          } else { md = ores; }
+        } catch (e) { md = ores; }
+        uc = ''Document content (extracted with OCR):\n'' + md + ''\n\n'' + String(prompt);
+      } else {
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
+        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
+      }
     }
     messages.push({ role: ''user'', content: uc });
     var modelId = String(model || '''');

@@ -5,19 +5,16 @@ comment: |
   
   Returns the provider response document (choices[0].message.content holds the answer).'
 ↓prepare [steps.SimpleStep-1791565455624]: 
-  comment: 'Builds the Gemini OpenAI-compatible chat/completions request: messages (system + multimodal user content), Bearer Authorization header, model (default gemini-2.5-flash).'
+  comment: 'Builds the Gemini OpenAI-compatible chat/completions request. Uploaded files go through the Gemini Files API (resumable upload, up to 2GB) and are referenced by their file URI: no base64 in the chat request.'
   expression: |
-    '// Builds the Gemini request through the official OpenAI-compatible endpoint
-    // /v1beta/openai/chat/completions.
-    // Variables: prompt (required), model, system, temperature, max_tokens, api_key, file (optional), file_type (optional).
+    '// Builds the Gemini request through the official OpenAI-compatible endpoint.
+    // Uploaded files go through the Gemini Files API (resumable upload -> file URI).
+    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
     var key = String(api_key || '''').trim();
-    var auth;
     if (key == '''') {
-      auth = ''Bearer ${lib_AIConnector.gemini_apikey.secret=}'';
-    } else {
-      auth = ''Bearer '' + key;
+      key = String(''${lib_AIConnector.gemini_apikey.secret=}'').trim();
     }
-    (__header_Authorization = auth) == '''';
+    (__header_Authorization = ''Bearer '' + key) == '''';
     var messages = [];
     if (String(system || '''') != '''') {
       messages.push({ role: ''system'', content: String(system) });
@@ -27,25 +24,57 @@ comment: |
     if (fp == '''') {
       uc = String(prompt);
     } else {
-      var fis = new java.io.FileInputStream(fp);
-      var bos = new java.io.ByteArrayOutputStream();
-      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var n;
-      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
-      fis.close();
-      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
       var mime = String(file_type || '''').trim();
       if (mime == '''') {
         var ext = fp.toLowerCase().replace(/.*\./, '''');
         mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      uc = [];
-      if (mime == ''application/pdf'') {
-        uc.push({ type: ''file'', file: { filename: ''upload.pdf'', file_data: ''data:application/pdf;base64,'' + b64 } });
-      } else {
-        uc.push({ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } });
-      }
-      uc.push({ type: ''text'', text: String(prompt) });
+      var fname = String(new java.io.File(fp).getName());
+      var fbos = new java.io.ByteArrayOutputStream();
+      var ffis = new java.io.FileInputStream(fp);
+      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var fn;
+      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
+      ffis.close();
+      var fbytes = fbos.toByteArray();
+      var flen = fbytes.length;
+      var c1 = new java.net.URL(''https://generativelanguage.googleapis.com/upload/v1beta/files'').openConnection();
+      c1.setRequestMethod(''POST'');
+      c1.setDoOutput(true);
+      c1.setRequestProperty(''x-goog-api-key'', key);
+      c1.setRequestProperty(''x-goog-upload-protocol'', ''resumable'');
+      c1.setRequestProperty(''x-goog-upload-command'', ''start'');
+      c1.setRequestProperty(''x-goog-upload-header-content-length'', String(flen));
+      c1.setRequestProperty(''x-goog-upload-header-content-type'', mime);
+      c1.setRequestProperty(''Content-Type'', ''application/json'');
+      var b1 = J(''{"file":{"display_name":"'' + fname + ''"}}'');
+      c1.setFixedLengthStreamingMode(b1.length);
+      var o1 = c1.getOutputStream();
+      o1.write(b1); o1.flush(); o1.close();
+      var upUrl = String(c1.getHeaderField(''x-goog-upload-url''));
+      if (upUrl == ''null'' || upUrl == '''') { throw new Error(''Gemini Files start failed (HTTP '' + c1.getResponseCode() + '')''); }
+      var c2 = new java.net.URL(upUrl).openConnection();
+      c2.setRequestMethod(''POST'');
+      c2.setDoOutput(true);
+      c2.setRequestProperty(''x-goog-api-key'', key);
+      c2.setRequestProperty(''x-goog-upload-command'', ''upload, finalize'');
+      c2.setRequestProperty(''x-goog-upload-offset'', ''0'');
+      c2.setRequestProperty(''Content-Type'', mime);
+      c2.setFixedLengthStreamingMode(flen);
+      var o2 = c2.getOutputStream();
+      o2.write(fbytes); o2.flush(); o2.close();
+      var fcode = c2.getResponseCode();
+      var ris = (fcode >= 200 && fcode < 300) ? c2.getInputStream() : c2.getErrorStream();
+      var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
+      var sb = new java.lang.StringBuilder();
+      var ln;
+      while ((ln = rd.readLine()) != null) { sb.append(ln); }
+      rd.close();
+      var fres = String(sb.toString());
+      if (fcode < 200 || fcode >= 300) { throw new Error(''Gemini Files upload failed (HTTP '' + fcode + ''): '' + fres); }
+      var fileObj = JSON.parse(fres).file;
+      var uri = String(fileObj.uri);
+      uc = [{ type: ''image_url'', image_url: { url: uri } }, { type: ''text'', text: String(prompt) }];
     }
     messages.push({ role: ''user'', content: uc });
     var modelId = String(model || '''');

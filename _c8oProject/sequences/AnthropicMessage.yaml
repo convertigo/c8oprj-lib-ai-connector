@@ -5,10 +5,11 @@ comment: |
   
   Returns the provider response document (content[0].text holds the answer).'
 ↓prepare [steps.SimpleStep-1791565379244]: 
-  comment: 'Builds the Anthropic Messages request: system + multimodal user content (image/document base64 + text), max_tokens, and the x-api-key / anthropic-version headers.'
+  comment: Builds the Anthropic Messages request. PDFs go through the Anthropic Files API (multipart upload with beta header, then file_id reference); images stay inline base64 (Messages API accepts no image file reference).
   expression: |
     '// Builds the Anthropic /v1/messages request.
-    // Variables: prompt (required), model, system, temperature, max_tokens, api_key, file (optional), file_type (optional).
+    // PDFs go through the Anthropic Files API; images stay inline base64 (API limitation).
+    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
     var key = String(api_key || '''').trim();
     if (key == '''') {
       (__header_x_api_key = ''${lib_AIConnector.anthropic_apikey.secret=}'') == '''';
@@ -21,25 +22,53 @@ comment: |
     if (fp == '''') {
       uc = String(prompt);
     } else {
-      var fis = new java.io.FileInputStream(fp);
-      var bos = new java.io.ByteArrayOutputStream();
-      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var n;
-      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
-      fis.close();
-      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
       var mime = String(file_type || '''').trim();
       if (mime == '''') {
         var ext = fp.toLowerCase().replace(/.*\./, '''');
         mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      uc = [];
+      var fname = String(new java.io.File(fp).getName());
+      var fbos = new java.io.ByteArrayOutputStream();
+      var ffis = new java.io.FileInputStream(fp);
+      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var fn;
+      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
+      ffis.close();
+      var fbytes = fbos.toByteArray();
       if (mime == ''application/pdf'') {
-        uc.push({ type: ''document'', source: { type: ''base64'', media_type: ''application/pdf'', data: b64 } });
+        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
+        var bos = new java.io.ByteArrayOutputStream();
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{"filename":"'' + fname + ''"}\r\n''));
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
+        bos.write(fbytes);
+        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
+        var conn = new java.net.URL(''https://api.anthropic.com/v1/files'').openConnection();
+        conn.setRequestMethod(''POST'');
+        conn.setDoOutput(true);
+        conn.setRequestProperty(''x-api-key'', String(__header_x_api_key));
+        conn.setRequestProperty(''anthropic-version'', ''2023-06-01'');
+        conn.setRequestProperty(''anthropic-beta'', ''files-api-2025-04-14'');
+        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
+        conn.setFixedLengthStreamingMode(bos.size());
+        var os = conn.getOutputStream();
+        os.write(bos.toByteArray());
+        os.flush();
+        os.close();
+        var fcode = conn.getResponseCode();
+        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
+        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
+        var sb = new java.lang.StringBuilder();
+        var ln;
+        while ((ln = rd.readLine()) != null) { sb.append(ln); }
+        rd.close();
+        var fres = String(sb.toString());
+        if (fcode < 200 || fcode >= 300) { throw new Error(''Anthropic Files upload failed (HTTP '' + fcode + ''): '' + fres); }
+        var fileId = String(JSON.parse(fres).id);
+        uc = [{ type: ''document'', source: { type: ''file'', file_id: fileId } }, { type: ''text'', text: String(prompt) }];
       } else {
-        uc.push({ type: ''image'', source: { type: ''base64'', media_type: mime, data: b64 } });
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
+        uc = [{ type: ''image'', source: { type: ''base64'', media_type: mime, data: b64 } }, { type: ''text'', text: String(prompt) }];
       }
-      uc.push({ type: ''text'', text: String(prompt) });
     }
     var body = { model: String(model), max_tokens: 1024, messages: [{ role: ''user'', content: uc }] };
     if (String(system || '''') != '''') { body.system = String(system); }

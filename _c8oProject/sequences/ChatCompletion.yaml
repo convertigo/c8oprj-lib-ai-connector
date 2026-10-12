@@ -7,34 +7,65 @@ comment: |
   
   Returns the provider response document (choices[0].message.content holds the answer).'
 ↓Build_Body [steps.ElementStep-1791797025703]: 
-  comment: Builds the chat/completions JSON body (model, messages, temperature, max_tokens, multimodal file blocks) as a hidden element used as source by Call_Transaction.
+  comment: Builds the chat/completions JSON body. PDFs go through the OpenAI Files API (multipart upload, purpose=user_data, file_id reference); images are inlined as base64 data URLs (OpenAI file parts require application/pdf).
   expression: |
-    'var m = [];
+    'var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
+    var m = [];
     if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
     var uc;
     var fp = String(file || '''').trim();
     if (fp == '''') {
       uc = String(prompt);
     } else {
-      var fis = new java.io.FileInputStream(fp);
-      var bos = new java.io.ByteArrayOutputStream();
-      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var n;
-      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
-      fis.close();
-      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
       var mime = String(file_type || '''').trim();
       if (mime == '''') {
         var ext = fp.toLowerCase().replace(/.*\./, '''');
         mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      uc = [];
+      var fname = String(new java.io.File(fp).getName());
+      var fbos = new java.io.ByteArrayOutputStream();
+      var ffis = new java.io.FileInputStream(fp);
+      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var fn;
+      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
+      ffis.close();
+      var fbytes = fbos.toByteArray();
       if (mime == ''application/pdf'') {
-        uc.push({ type: ''file'', file: { filename: ''upload.pdf'', file_data: ''data:application/pdf;base64,'' + b64 } });
+        var key = (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.openai_apikey.secret=}'').trim());
+        var fbase = String(base_url || '''').trim();
+        if (fbase == '''') { fbase = ''https://api.openai.com/v1''; }
+        fbase = fbase.replace(/\/+$/, '''');
+        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
+        var bos = new java.io.ByteArrayOutputStream();
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nuser_data\r\n''));
+        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
+        bos.write(fbytes);
+        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
+        var conn = new java.net.URL(fbase + ''/files'').openConnection();
+        conn.setRequestMethod(''POST'');
+        conn.setDoOutput(true);
+        conn.setRequestProperty(''Authorization'', ''Bearer '' + key);
+        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
+        conn.setFixedLengthStreamingMode(bos.size());
+        var os = conn.getOutputStream();
+        os.write(bos.toByteArray());
+        os.flush();
+        os.close();
+        var fcode = conn.getResponseCode();
+        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
+        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
+        var sb = new java.lang.StringBuilder();
+        var ln;
+        while ((ln = rd.readLine()) != null) { sb.append(ln); }
+        rd.close();
+        var fres = String(sb.toString());
+        if (fcode < 200 || fcode >= 300) { throw new Error(''Files upload failed (HTTP '' + fcode + ''): '' + fres); }
+        var fileId = String(JSON.parse(fres).id);
+        uc = [{ type: ''file'', file: { file_id: fileId } }, { type: ''text'', text: String(prompt) }];
       } else {
-        uc.push({ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } });
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
+        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
       }
-      uc.push({ type: ''text'', text: String(prompt) });
     }
     m.push({ role: ''user'', content: uc });
     var b = { model: String(model || ''gpt-4o-mini''), messages: m };
