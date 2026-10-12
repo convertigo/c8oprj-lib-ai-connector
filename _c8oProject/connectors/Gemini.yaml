@@ -32,3 +32,86 @@ trustAllServerCertificates: false
       - ↑traceable: false
       - →→: xd8e180806a1c1d83a6255212121ab827
     visibility: 15
+↓UploadFile [transactions.HttpTransaction]: 
+  allowedUriOverride: absolute
+  comment: 'POST to the upload URL returned by UploadStart: sends the raw binary file as the request body (x-goog-upload-command=upload, finalize). The sequence passes the file path through __body with Do File Upload Mode = multipartFormData (body mode: file content sent as body), and the MIME type through the reserved __contentType variable. JsonHttpTransaction parses the final file JSON (file.uri) so the sequence can reference the uploaded file.'
+  httpInfo: true
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/pdf
+  httpVerb: POST
+  responseTimeout: 200
+  ↓__uri [variables.RequestableHttpVariable-1791809183977]: 
+    httpName: __uri
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__body [variables.RequestableHttpVariable-1791809183980]: 
+    doFileUploadMode: multipartFormData
+    httpMethod: POST
+  ↓__header_x_goog_api_key [variables.RequestableHttpVariable-1791809183982]: 
+    httpName: x-goog-api-key
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_x_goog_upload_command [variables.RequestableHttpVariable-1791809183984]: 
+    httpName: x-goog-upload-command
+    value: upload, finalize
+  ↓__header_x_goog_upload_offset [variables.RequestableHttpVariable-1791809183986]: 
+    httpName: x-goog-upload-offset
+    value: 0
+  ↓__header_content_type [variables.RequestableHttpVariable-1791809183988]: 
+    httpName: Content-Type
+    value: application/pdf
+  ↓__contentType [variables.RequestableHttpVariable-1791809314541]: 
+↓UploadStart [transactions.HttpTransaction]: 
+  allowedUriOverride: absolute
+  comment: 'POST https://generativelanguage.googleapis.com/upload/v1beta/files: resumable upload session start (x-goog-upload-protocol=resumable, x-goog-upload-command=start, x-goog-upload-content-type from the sequence scope). The response x-goog-upload-url header (httpInfo) gives the upload target URL.'
+  httpInfo: true
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  ↓__uri [variables.RequestableHttpVariable-1791809091085]: 
+    httpName: __uri
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_x_goog_api_key [variables.RequestableHttpVariable-1791809091087]: 
+    httpName: x-goog-api-key
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_x_goog_upload_command [variables.RequestableHttpVariable-1791809091089]: 
+    httpName: x-goog-upload-command
+    value: start
+  ↓__header_x_goog_upload_protocol [variables.RequestableHttpVariable-1791809091091]: 
+    httpName: x-goog-upload-protocol
+    value: resumable
+  ↓__header_x_goog_upload_content_type [variables.RequestableHttpVariable-1791809091093]: 
+    httpName: x-goog-upload-content-type
+    value: application/pdf

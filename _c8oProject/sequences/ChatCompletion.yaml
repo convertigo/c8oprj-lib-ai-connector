@@ -1,3 +1,4 @@
+accessibility: Private
 comment: |
   'Chat completion for any OpenAI-compatible /v1/chat/completions endpoint (OpenAI default, or any provider through base_url: Groq, OpenRouter, Together, DeepSeek, xAI, Perplexity, Ollama...).
   
@@ -6,78 +7,6 @@ comment: |
   The Build_Body / Build_Auth / Build_Uri steps build the request (JSON body, Bearer header, full URL) as hidden XML elements; the Call_Transaction step variables read them through sourceDefinition references.
   
   Returns the provider response document (choices[0].message.content holds the answer).'
-↓Build_Body [steps.ElementStep-1791797025703]: 
-  comment: Builds the chat/completions JSON body. PDFs go through the OpenAI Files API (multipart upload, purpose=user_data, file_id reference); images are inlined as base64 data URLs (OpenAI file parts require application/pdf).
-  expression: |
-    'var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
-    var m = [];
-    if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
-    var uc;
-    var fp = String(file || '''').trim();
-    if (fp == '''') {
-      uc = String(prompt);
-    } else {
-      var mime = String(file_type || '''').trim();
-      if (mime == '''') {
-        var ext = fp.toLowerCase().replace(/.*\./, '''');
-        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
-      }
-      var fname = String(new java.io.File(fp).getName());
-      var fbos = new java.io.ByteArrayOutputStream();
-      var ffis = new java.io.FileInputStream(fp);
-      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var fn;
-      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
-      ffis.close();
-      var fbytes = fbos.toByteArray();
-      if (mime == ''application/pdf'') {
-        var key = (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.openai_apikey.secret=}'').trim());
-        var fbase = String(base_url || '''').trim();
-        if (fbase == '''') { fbase = ''https://api.openai.com/v1''; }
-        fbase = fbase.replace(/\/+$/, '''');
-        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
-        var bos = new java.io.ByteArrayOutputStream();
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nuser_data\r\n''));
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
-        bos.write(fbytes);
-        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
-        var conn = new java.net.URL(fbase + ''/files'').openConnection();
-        conn.setRequestMethod(''POST'');
-        conn.setDoOutput(true);
-        conn.setRequestProperty(''Authorization'', ''Bearer '' + key);
-        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
-        conn.setFixedLengthStreamingMode(bos.size());
-        var os = conn.getOutputStream();
-        os.write(bos.toByteArray());
-        os.flush();
-        os.close();
-        var fcode = conn.getResponseCode();
-        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
-        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
-        var sb = new java.lang.StringBuilder();
-        var ln;
-        while ((ln = rd.readLine()) != null) { sb.append(ln); }
-        rd.close();
-        var fres = String(sb.toString());
-        if (fcode < 200 || fcode >= 300) { throw new Error(''Files upload failed (HTTP '' + fcode + ''): '' + fres); }
-        var fileId = String(JSON.parse(fres).id);
-        uc = [{ type: ''file'', file: { file_id: fileId } }, { type: ''text'', text: String(prompt) }];
-      } else {
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
-        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
-      }
-    }
-    m.push({ role: ''user'', content: uc });
-    var b = { model: String(model || ''gpt-4o-mini''), messages: m };
-    var t = Number(temperature);
-    if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
-    var mt = Number(max_tokens);
-    if (String(max_tokens || '''') != '''' && !isNaN(mt)) {
-      if (/^(gpt-5|o[0-9])/.test(String(model))) { b.max_completion_tokens = mt; } else { b.max_tokens = mt; }
-    }
-    JSON.stringify(b)'
-  nodeName: Body
-  output: false
 ↓Build_Auth [steps.ElementStep-1791797025718]: 
   comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.openai_apikey.secret symbol) as a hidden element used as source by Call_Transaction.
   expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.openai_apikey.secret=}'').trim())'
@@ -92,6 +21,107 @@ comment: |
     if (!/\/chat\/completions\/?$/.test(base)) { base = base.replace(/\/+$/, '') + '/chat/completions'; }
     base
   nodeName: Uri
+  output: false
+↓Build_FilePath [steps.ElementStep-1791812989174]: 
+  comment: Resolves the uploaded file path (relative paths such as tests/ciel.png in test cases are resolved against the Convertigo projects directory) as a hidden element used as the Call_UploadFile file source.
+  expression: |
+    'var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var f = new java.io.File(fp);
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var c2 = new java.io.File(pd + ''/'' + fp);
+        fp = c1.exists() ? String(c1.getAbsolutePath()) : (c2.exists() ? String(c2.getAbsolutePath()) : fp);
+      }
+    }
+    fp'
+  nodeName: FilePath
+  output: false
+↓If_Pdf [steps.IfStep-1791809914527]: 
+  comment: 'Runs the OpenAI Files API upload only for PDF files (images stay inline base64: OpenAI file parts require application/pdf).'
+  condition: 'var fp = String(file || '''').trim(); if (fp == '''') { false; } else { var mt = String(file_type || '''').trim(); if (mt == '''') { mt = fp.toLowerCase().replace(/.*\./, '''') == ''pdf'' ? ''application/pdf'' : ''image/png''; } mt == ''application/pdf''; }'
+  ↓Call_UploadFile [steps.TransactionStep-1791809922000]: 
+    comment: 'Calls the AI connector UploadFile transaction: the HTTP connector streams the PDF as a multipart file part to the OpenAI Files API (no manual multipart in JS).'
+    sourceTransaction: lib_AIConnector.AI.UploadFile
+    ↓file [variables.StepVariable-1791809922002]: 
+      comment: Resolved uploaded file path, from Build_FilePath
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791812989174
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓purpose [variables.StepVariable-1791809922004]: 
+      value: user_data
+    ↓__header_Authorization [variables.StepVariable-1791809922006]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791797025718
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_FileId [steps.SimpleSourceStep-1791809938693]: 
+    comment: Extracts the OpenAI file_id from the UploadFile transaction document (JSON id property under the object root), exposed as the uploadFileId JS variable used by Build_Body.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791809922000
+          - java.lang.String: 
+            - ↑value: ./document/object/id/text()
+    variableName: uploadFileId
+↓Build_Body [steps.ElementStep-1791797025703]: 
+  comment: 'Builds the chat/completions JSON body from the sequence scope: messages (with the uploaded PDF file_id when a PDF was provided), model, temperature, max_tokens. Runs after Call_UploadFile so uploadFileId is available.'
+  expression: |
+    'var m = [];
+    if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
+    var uc;
+    var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var rf = new java.io.File(fp);
+      if (!rf.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var r1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var r2 = new java.io.File(pd + ''/'' + fp);
+        fp = r1.exists() ? String(r1.getAbsolutePath()) : (r2.exists() ? String(r2.getAbsolutePath()) : fp);
+      }
+    }
+    if (fp == '''') {
+      uc = String(prompt);
+    } else {
+      var mime = String(file_type || '''').trim();
+      if (mime == '''') {
+        var ext = fp.toLowerCase().replace(/.*\./, '''');
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+      }
+      if (mime == ''application/pdf'') {
+        uc = [{ type: ''file'', file: { file_id: String(uploadFileId) } }, { type: ''text'', text: String(prompt) }];
+      } else {
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(new java.io.FileInputStream(fp).readAllBytes()));
+        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
+      }
+    }
+    m.push({ role: ''user'', content: uc });
+    var b = { model: String(model || ''gpt-4o-mini''), messages: m };
+    var t = Number(temperature);
+    if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) {
+      if (/^(gpt-5|o[0-9])/.test(String(model))) { b.max_completion_tokens = mt; } else { b.max_tokens = mt; }
+    }
+    JSON.stringify(b)'
+  nodeName: Body
   output: false
 ↓Call_Transaction [steps.TransactionStep-1673537622312]: 
   comment: Calls the AI connector ChatCompletions transaction (OpenAI-compatible POST).

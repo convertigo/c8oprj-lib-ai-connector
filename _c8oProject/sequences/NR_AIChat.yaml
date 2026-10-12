@@ -1,3 +1,4 @@
+accessibility: Private
 comment: 'Non-regression suite for AIChat: runs the validated test matrix (provider routing, system prompt, temperature, max_tokens truncation, model override) and reports PASS/FAIL per check. Gemini is excluded (prepaid credits depleted, HTTP 402).'
 ↓init [steps.SimpleStep-1791799915670]: 
   expression: |
@@ -17,7 +18,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
   ↓max_tokens [variables.StepVariable-1791799915680]: 
     value: 20
 ↓get_openai_content [steps.SimpleSourceStep-1791799930369]: 
-  comment: Extracts the answer text from Call_openai_basic response.
+  comment: Extracts the answer text from Call_openai_basic response (AIChat now emits only the model answer).
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -25,20 +26,20 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791799915672
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+          - ↑value: ./document/content/text()
   variableName: openai_content
 ↓check_openai_basic [steps.SimpleStep-1791799930374]: 
   comment: Asserts openai default branch answers a single French word.
   expression: '__nr_check(''openai_basic: system+temp0'', openai_content != null && String(openai_content).toLowerCase().indexOf(''ciel'') == 0, openai_content)'
 ↓Call_openai_trunc [steps.SequenceStep-1791799930378]: 
-  comment: 'Test 2: max_tokens=5 must truncate with finish_reason length.'
-  sourceSequence: lib_AIConnector.AIChat
+  comment: 'Test 2: max_tokens=5 must truncate with finish_reason length. Calls ChatCompletion directly: AIChat no longer exposes finish_reason (answer-only output), and the provider document is needed for this assertion.'
+  sourceSequence: lib_AIConnector.ChatCompletion
   ↓prompt [variables.StepVariable-1791799930380]: 
     value: Explain photosynthesis in great detail
   ↓max_tokens [variables.StepVariable-1791799930382]: 
     value: 5
 ↓get_openai_trunc [steps.SimpleSourceStep-1791799943037]: 
-  comment: Extracts finish_reason and completion tokens from Call_openai_trunc.
+  comment: Extracts finish_reason from the ChatCompletion provider document.
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -46,14 +47,14 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791799930378
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/choices/object/finish_reason/text()
+          - ↑value: ./document/object/choices/object/finish_reason/text()
   variableName: openai_trunc_reason
 ↓check_openai_trunc [steps.SimpleStep-1791799943051]: 
   comment: Asserts max_tokens=5 truncates (finish_reason length).
   expression: '__nr_check(''openai_max_tokens: truncation'', openai_trunc_reason == ''length'', openai_trunc_reason)'
 ↓Call_openai_model [steps.SequenceStep-1791799943057]: 
-  comment: 'Test 3: model override gpt-4.1-mini.'
-  sourceSequence: lib_AIConnector.AIChat
+  comment: 'Test 3: model override gpt-4.1-mini. Calls ChatCompletion directly: AIChat no longer exposes the responding model id (answer-only output), and the provider document is needed for this assertion.'
+  sourceSequence: lib_AIConnector.ChatCompletion
   ↓prompt [variables.StepVariable-1791799943059]: 
     value: Say OK
   ↓model [variables.StepVariable-1791799943061]: 
@@ -61,7 +62,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
   ↓max_tokens [variables.StepVariable-1791799943063]: 
     value: 10
 ↓get_openai_model [steps.SimpleSourceStep-1791799943065]: 
-  comment: Extracts the responding model id from Call_openai_model.
+  comment: Extracts the responding model id from the ChatCompletion provider document.
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -69,7 +70,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791799943057
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/model/text()
+          - ↑value: ./document/object/model/text()
   variableName: openai_model_id
 ↓check_openai_model [steps.SimpleStep-1791799943067]: 
   comment: Asserts model override is honored.
@@ -90,7 +91,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
   ↓max_tokens [variables.StepVariable-1791799943086]: 
     value: 20
 ↓get_mistral_content [steps.SimpleSourceStep-1791799943094]: 
-  comment: Extracts the Mistral answer text.
+  comment: Extracts the Mistral answer text (AIChat answer-only output).
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -98,7 +99,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791799943074
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+          - ↑value: ./document/content/text()
   variableName: mistral_content
 ↓check_mistral [steps.SimpleStep-1791799943101]: 
   comment: Asserts mistral branch answers a single French word.
@@ -119,7 +120,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
   ↓max_tokens [variables.StepVariable-1791799943119]: 
     value: 20
 ↓get_anthropic_content [steps.SimpleSourceStep-1791799943121]: 
-  comment: Extracts the Anthropic answer text.
+  comment: Extracts the Anthropic answer text (AIChat answer-only output, copied text node).
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -127,7 +128,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791799943107
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/content/object/text/text()
+          - ↑value: ./document/text/text()
   variableName: anthropic_content
 ↓check_anthropic [steps.SimpleStep-1791799943123]: 
   comment: Asserts anthropic branch answers a single French word.
@@ -146,7 +147,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
   ↓max_tokens [variables.StepVariable-1791800645959]: 
     value: 200
 ↓get_gemini_content [steps.SimpleSourceStep-1791800663064]: 
-  comment: Extracts the Gemini answer text (success case).
+  comment: Extracts the Gemini answer text (success case, AIChat answer-only output).
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -154,10 +155,10 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791800645949
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+          - ↑value: ./document/content/text()
   variableName: gemini_content
 ↓get_gemini_error [steps.SimpleSourceStep-1791800663080]: 
-  comment: Extracts the Gemini error code (billing/quota case).
+  comment: 'Legacy billing-error probe: AIChat no longer exposes provider errors (answer-only output); stays null when Gemini answers, the check reports the missing answer otherwise.'
   sourceDefinition: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -165,7 +166,7 @@ comment: 'Non-regression suite for AIChat: runs the validated test matrix (provi
         - java.lang.String: 
           - ↑value: 1791800645949
         - java.lang.String: 
-          - ↑value: ./document/sequence/document/array/object/error/code/text()
+          - ↑value: ./document/content/text()
   variableName: gemini_error_code
 ↓check_gemini [steps.SimpleStep-1791800663087]: 
   comment: PASS if the answer is correct, SKIP on the 402 billing error, FAIL otherwise.

@@ -1,15 +1,19 @@
+accessibility: Private
 comment: |
   'Hat (facade) sequence: routes a chat completion request to the right provider connector.
   
-  Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider''s lib_AIConnector symbol), base_url (openai provider only), file (optional multipart upload: image or PDF), file_type (optional MIME type, guessed from the extension when empty).
+  Variables: provider (openai|anthropic|gemini|mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key, base_url (openai only), file (optional image or PDF, multipart upload), file_type.
   
-  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. Uploaded files go through the provider Files APIs (binary multipart uploads, no base64 for documents in the chat requests): OpenAI uploads PDFs to /v1/files (purpose user_data) and references file_id in the message; Anthropic uploads PDFs to its Files API (beta) and references file_id; Gemini uses the resumable Files API and references the file URI (images and PDFs); Mistral uploads PDFs with purpose ocr, extracts text through POST /v1/ocr and feeds it to the chat. Images stay inline base64 data URLs on providers whose chat API accepts no image file reference (OpenAI, Anthropic, Mistral). The answer shape follows the target provider.'
+  Files API architecture: every upload goes through the Convertigo HTTP connector transactions (multipartFormData streaming, no Java networking in Rhino scripts):
+  - openai: AI.UploadFile (purpose=user_data) → file_id in the chat message
+  - anthropic: Anthropic.UploadFile (files API beta) → file_id in the chat message
+  - gemini: Gemini.UploadStart + Gemini.UploadFile (resumable upload, x-goog headers) → file URI in the chat message
+  - mistral: Mistral.UploadFile (purpose=ocr) → Mistral.FileUrl (signed URL) → Mistral.Ocr (markdown) → text in the chat message; images stay inline base64 (vision models such as pixtral-12b)'
 ↓If_openai [steps.IfStep-1791566493053]: 
   comment: 'provider openai (default): calls ChatCompletion (any OpenAI-compatible endpoint).'
   condition: String(provider || 'openai').toLowerCase() == 'openai'
   ↓Call_ChatCompletion [steps.SequenceStep-1791566497889]: 
-    comment: Calls ChatCompletion (any OpenAI-compatible provider).
-    output: true
+    comment: 'Calls ChatCompletion (any OpenAI-compatible provider). output=false: only the extracted answer is copied to the sequence output by Copy_answer.'
     sourceSequence: lib_AIConnector.ChatCompletion
     ↓prompt [variables.StepVariable-1791566507626]: 
       comment: User prompt, from the AIChat sequence scope
@@ -34,12 +38,62 @@ comment: |
       comment: Uploaded file (image or PDF), from the AIChat sequence scope
     ↓file_type [variables.StepVariable-1791802567670]: 
       comment: MIME type of the uploaded file, from the AIChat sequence scope
+  ↓Get_error [steps.SimpleSourceStep-1791814153871]: 
+    comment: Extracts the provider error message from the ChatCompletion response document (null when the call succeeded).
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791566497889
+          - java.lang.String: 
+            - ↑value: ./document/object/error/message/text()
+    variableName: aiError
+  ↓If_ok [steps.IfStep-1791814153885]: 
+    comment: 'No provider error: copies the model answer only.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n == 0)'
+    ↓Copy_answer [steps.XMLCopyStep-1791813769768]: 
+      comment: Copies only the model answer (choices[0].message.content) from the ChatCompletion response into the AIChat output.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497889
+            - java.lang.String: 
+              - ↑value: ./document/object/choices/object/message/content
+  ↓If_error [steps.IfStep-1791814153937]: 
+    comment: 'Provider error: copies the provider error node so the client sees the failure reason.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n > 0)'
+    ↓Copy_error [steps.XMLCopyStep-1791814153945]: 
+      comment: Copies the provider error object into the AIChat output when the call failed.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497889
+            - java.lang.String: 
+              - ↑value: ./document/object/error
 ↓If_anthropic [steps.IfStep-1791566493066]: 
   comment: 'provider anthropic: calls AnthropicMessage.'
   condition: String(provider || '').toLowerCase() == 'anthropic'
   ↓Call_AnthropicMessage [steps.SequenceStep-1791566497908]: 
-    comment: Calls AnthropicMessage (Anthropic native Messages API).
-    output: true
+    comment: 'Calls AnthropicMessage (Anthropic native Messages API). output=false: only the extracted answer is copied to the sequence output by Copy_answer.'
     sourceSequence: lib_AIConnector.AnthropicMessage
     ↓prompt [variables.StepVariable-1791566507718]: 
       comment: User prompt, from the AIChat sequence scope
@@ -62,12 +116,62 @@ comment: |
       comment: Uploaded file (image or PDF), from the AIChat sequence scope
     ↓file_type [variables.StepVariable-1791802567681]: 
       comment: MIME type of the uploaded file, from the AIChat sequence scope
+  ↓Get_error [steps.SimpleSourceStep-1791814153955]: 
+    comment: Extracts the provider error message from the AnthropicMessage response document (null when the call succeeded).
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791566497908
+          - java.lang.String: 
+            - ↑value: ./document/object/error/message/text()
+    variableName: aiError
+  ↓If_ok [steps.IfStep-1791814153962]: 
+    comment: 'No provider error: copies the model answer only.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n == 0)'
+    ↓Copy_answer [steps.XMLCopyStep-1791813769777]: 
+      comment: Copies only the model answer (content[0].text) from the Anthropic response into the AIChat output.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497908
+            - java.lang.String: 
+              - ↑value: ./document/object/content/object/text
+  ↓If_error [steps.IfStep-1791814153981]: 
+    comment: 'Provider error: copies the provider error node so the client sees the failure reason.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n > 0)'
+    ↓Copy_error [steps.XMLCopyStep-1791814153989]: 
+      comment: Copies the provider error object into the AIChat output when the call failed.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497908
+            - java.lang.String: 
+              - ↑value: ./document/object/error
 ↓If_gemini [steps.IfStep-1791566493079]: 
   comment: 'provider gemini: calls GeminiMessage.'
   condition: String(provider || '').toLowerCase() == 'gemini'
   ↓Call_GeminiMessage [steps.SequenceStep-1791566497924]: 
-    comment: Calls GeminiMessage (Google Gemini, OpenAI-compatible endpoint).
-    output: true
+    comment: 'Calls GeminiMessage (Google Gemini, OpenAI-compatible endpoint). output=false: only the extracted answer is copied to the sequence output by Copy_answer.'
     sourceSequence: lib_AIConnector.GeminiMessage
     ↓prompt [variables.StepVariable-1791566507772]: 
       comment: User prompt, from the AIChat sequence scope
@@ -90,12 +194,62 @@ comment: |
       comment: Uploaded file (image or PDF), from the AIChat sequence scope
     ↓file_type [variables.StepVariable-1791802576340]: 
       comment: MIME type of the uploaded file, from the AIChat sequence scope
+  ↓Get_error [steps.SimpleSourceStep-1791814153997]: 
+    comment: Extracts the provider error message (or code) from the GeminiMessage response document (null when the call succeeded). Covers the object root and the array root error shapes.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791566497924
+          - java.lang.String: 
+            - ↑value: ./document/object/error/message/text() | ./document/array/object/error/message/text() | ./document/object/error/code/text() | ./document/array/object/error/code/text()
+    variableName: aiError
+  ↓If_ok [steps.IfStep-1791814154009]: 
+    comment: 'No provider error: copies the model answer only.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n == 0)'
+    ↓Copy_answer [steps.XMLCopyStep-1791813769787]: 
+      comment: Copies only the model answer (choices[0].message.content) from the Gemini response into the AIChat output.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497924
+            - java.lang.String: 
+              - ↑value: ./document/object/choices/object/message/content
+  ↓If_error [steps.IfStep-1791814154029]: 
+    comment: 'Provider error: copies the provider error node so the client sees the failure reason.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n > 0)'
+    ↓Copy_error [steps.XMLCopyStep-1791814154037]: 
+      comment: Copies the provider error object into the AIChat output when the call failed.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497924
+            - java.lang.String: 
+              - ↑value: ./document/object/error | ./document/array/object/error
 ↓If_mistral [steps.IfStep-1791566493089]: 
   comment: 'provider mistral: calls MistralMessage.'
   condition: String(provider || '').toLowerCase() == 'mistral'
   ↓Call_MistralMessage [steps.SequenceStep-1791566497933]: 
-    comment: Calls MistralMessage (Mistral AI).
-    output: true
+    comment: 'Calls MistralMessage (Mistral AI). output=false: only the extracted answer is copied to the sequence output by Copy_answer.'
     sourceSequence: lib_AIConnector.MistralMessage
     ↓prompt [variables.StepVariable-1791566507815]: 
       comment: User prompt, from the AIChat sequence scope
@@ -118,6 +272,57 @@ comment: |
       comment: Uploaded file (image or PDF), from the AIChat sequence scope
     ↓file_type [variables.StepVariable-1791802576353]: 
       comment: MIME type of the uploaded file, from the AIChat sequence scope
+  ↓Get_error [steps.SimpleSourceStep-1791814154042]: 
+    comment: Extracts the provider error message (detail or message) from the MistralMessage response document (null when the call succeeded).
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791566497933
+          - java.lang.String: 
+            - ↑value: ./document/object/detail/text() | ./document/object/message/text()
+    variableName: aiError
+  ↓If_ok [steps.IfStep-1791814154054]: 
+    comment: 'No provider error: copies the model answer only.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n == 0)'
+    ↓Copy_answer [steps.XMLCopyStep-1791813769798]: 
+      comment: Copies only the model answer (choices[0].message.content) from the Mistral response into the AIChat output.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497933
+            - java.lang.String: 
+              - ↑value: ./document/object/choices/object/message/content
+  ↓If_error [steps.IfStep-1791814154065]: 
+    comment: 'Provider error: copies the provider error node so the client sees the failure reason.'
+    condition: |
+      'var e = (typeof aiError == ''undefined'') ? null : aiError;
+      var n = 0;
+      if (e != null) {
+        if (e instanceof org.w3c.dom.NodeList) { n = e.getLength(); }
+        else if (String(e).trim() != '''') { n = 1; }
+      }
+      (n > 0)'
+    ↓Copy_error [steps.XMLCopyStep-1791814154070]: 
+      comment: Copies the provider error object into the AIChat output when the call failed.
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791566497933
+            - java.lang.String: 
+              - ↑value: ./document/object/detail | ./document/object/message
 ↓provider [variables.RequestableVariable-1791566488788]: 
   comment: 'Target provider: openai | anthropic | gemini | mistral. Default openai.'
   value: openai
@@ -158,6 +363,26 @@ comment: |
     value: Say OK
   ↓api_key [variables.TestCaseVariable-1791795848972]: 
     value: sk-ant-fake-key
+↓test_anthropic_image [core.TestCase]: 
+  comment: 'provider=anthropic + image file (inline base64 vision): the model must read the word CIEL in tests/ciel.png.'
+  ↓provider [variables.TestCaseVariable-1791812861060]: 
+    value: anthropic
+  ↓prompt [variables.TestCaseVariable-1791812861062]: 
+    value: Read the text in this image. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812861064]: 
+    value: tests/ciel.png
+  ↓file_type [variables.TestCaseVariable-1791812861066]: 
+    value: image/png
+↓test_anthropic_pdf [core.TestCase]: 
+  comment: 'provider=anthropic + PDF file (Files API upload, files-api beta): the model must read the word CIEL in tests/ciel.pdf.'
+  ↓provider [variables.TestCaseVariable-1791812864715]: 
+    value: anthropic
+  ↓prompt [variables.TestCaseVariable-1791812864717]: 
+    value: Read the text in this document. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812864719]: 
+    value: tests/ciel.pdf
+  ↓file_type [variables.TestCaseVariable-1791812864721]: 
+    value: application/pdf
 ↓test_default_openai [core.TestCase]: 
   comment: 'No provider: default openai branch must run (ChatCompletion, OpenAI endpoint).'
   ↓prompt [variables.TestCaseVariable-1791795856341]: 
@@ -172,6 +397,26 @@ comment: |
     value: Say OK
   ↓api_key [variables.TestCaseVariable-1791795856413]: 
     value: fake-key
+↓test_gemini_image [core.TestCase]: 
+  comment: 'provider=gemini + image file (resumable Files API upload): the model must read the word CIEL in tests/ciel.png.'
+  ↓provider [variables.TestCaseVariable-1791812868479]: 
+    value: gemini
+  ↓prompt [variables.TestCaseVariable-1791812868481]: 
+    value: Read the text in this image. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812868483]: 
+    value: tests/ciel.png
+  ↓file_type [variables.TestCaseVariable-1791812868485]: 
+    value: image/png
+↓test_gemini_pdf [core.TestCase]: 
+  comment: 'provider=gemini + PDF file (resumable Files API upload): the model must read the word CIEL in tests/ciel.pdf.'
+  ↓provider [variables.TestCaseVariable-1791812872518]: 
+    value: gemini
+  ↓prompt [variables.TestCaseVariable-1791812872520]: 
+    value: Read the text in this document. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812872522]: 
+    value: tests/ciel.pdf
+  ↓file_type [variables.TestCaseVariable-1791812872524]: 
+    value: application/pdf
 ↓test_mistral [core.TestCase]: 
   comment: 'provider=mistral: MistralMessage branch, default model mistral-large-latest.'
   ↓provider [variables.TestCaseVariable-1791795856415]: 
@@ -180,6 +425,28 @@ comment: |
     value: Say OK
   ↓api_key [variables.TestCaseVariable-1791795856419]: 
     value: fake-key
+↓test_mistral_image [core.TestCase]: 
+  comment: 'provider=mistral + image file (inline base64 vision, pixtral-12b): the model must read the word CIEL in tests/ciel.png.'
+  ↓provider [variables.TestCaseVariable-1791812876195]: 
+    value: mistral
+  ↓model [variables.TestCaseVariable-1791812876197]: 
+    value: pixtral-12b
+  ↓prompt [variables.TestCaseVariable-1791812876199]: 
+    value: Read the text in this image. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812876201]: 
+    value: tests/ciel.png
+  ↓file_type [variables.TestCaseVariable-1791812876203]: 
+    value: image/png
+↓test_mistral_pdf [core.TestCase]: 
+  comment: 'provider=mistral + PDF file (Files API upload + OCR pipeline): the model must read the word CIEL in tests/ciel.pdf.'
+  ↓provider [variables.TestCaseVariable-1791812879494]: 
+    value: mistral
+  ↓prompt [variables.TestCaseVariable-1791812879496]: 
+    value: Read the text in this document. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812879498]: 
+    value: tests/ciel.pdf
+  ↓file_type [variables.TestCaseVariable-1791812879500]: 
+    value: application/pdf
 ↓test_openai_base_url [core.TestCase]: 
   comment: 'provider=openai + base_url: any OpenAI-compatible endpoint override.'
   ↓provider [variables.TestCaseVariable-1791795856398]: 
@@ -198,6 +465,26 @@ comment: |
     value: Say OK
   ↓api_key [variables.TestCaseVariable-1791795856396]: 
     value: sk-fake-key
+↓test_openai_image [core.TestCase]: 
+  comment: 'provider=openai + image file (multipart upload, Files API): the model must read the word CIEL in tests/ciel.png.'
+  ↓provider [variables.TestCaseVariable-1791812853597]: 
+    value: openai
+  ↓prompt [variables.TestCaseVariable-1791812853599]: 
+    value: Read the text in this image. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812853601]: 
+    value: tests/ciel.png
+  ↓file_type [variables.TestCaseVariable-1791812853603]: 
+    value: image/png
+↓test_openai_pdf [core.TestCase]: 
+  comment: 'provider=openai + PDF file (Files API upload, purpose=user_data): the model must read the word CIEL in tests/ciel.pdf.'
+  ↓provider [variables.TestCaseVariable-1791812857562]: 
+    value: openai
+  ↓prompt [variables.TestCaseVariable-1791812857564]: 
+    value: Read the text in this document. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791812857566]: 
+    value: tests/ciel.pdf
+  ↓file_type [variables.TestCaseVariable-1791812857568]: 
+    value: application/pdf
 ↓test_unknown_provider [core.TestCase]: 
   comment: 'Unknown provider: no branch runs, empty output (expected behavior, proves dispatch exclusivity).'
   ↓provider [variables.TestCaseVariable-1791795856422]: 

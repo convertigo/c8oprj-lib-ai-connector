@@ -1,24 +1,107 @@
+accessibility: Private
 comment: |
   'Chat completion through the Anthropic native Messages API (Claude models).
   
   Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol).
   
   Returns the provider response document (content[0].text holds the answer).'
+↓Build_Auth [steps.ElementStep-1791810077175]: 
+  comment: Builds the x-api-key header value (api_key or lib_AIConnector.anthropic_apikey.secret symbol) as a hidden element used as source by Call_UploadFile and Call_Messages.
+  expression: 'String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.anthropic_apikey.secret=}'').trim()'
+  nodeName: Auth
+  output: false
+↓Build_Metadata [steps.ElementStep-1791810081273]: 
+  comment: Builds the Anthropic Files API multipart metadata part (JSON with the uploaded file name) as a hidden element used as source by Call_UploadFile.
+  expression: |
+    'var fp = String(file || '''').trim();
+    var nm = fp == '''' ? ''document.pdf'' : String(new java.io.File(fp).getName());
+    JSON.stringify({ filename: nm })'
+  nodeName: Metadata
+  output: false
+↓Build_FilePath [steps.ElementStep-1791812989184]: 
+  comment: Resolves the uploaded file path (relative paths in test cases are resolved against the Convertigo projects directory) as a hidden element used as the Call_UploadFile file source.
+  expression: |
+    'var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var f = new java.io.File(fp);
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var c2 = new java.io.File(pd + ''/'' + fp);
+        fp = c1.exists() ? String(c1.getAbsolutePath()) : (c2.exists() ? String(c2.getAbsolutePath()) : fp);
+      }
+    }
+    fp'
+  nodeName: FilePath
+  output: false
+↓If_Pdf [steps.IfStep-1791810052388]: 
+  comment: Runs the Anthropic Files API upload only for PDF files (images stay inline base64).
+  condition: 'var fp = String(file || '''').trim(); if (fp == '''') { false; } else { var mt = String(file_type || '''').trim(); if (mt == '''') { mt = fp.toLowerCase().replace(/.*\./, '''') == ''pdf'' ? ''application/pdf'' : ''image/png''; } mt == ''application/pdf''; }'
+  ↓Call_UploadFile [steps.TransactionStep-1791810056487]: 
+    comment: 'Calls the Anthropic connector UploadFile transaction: the HTTP connector streams the PDF as a multipart file part to the Anthropic Files API.'
+    sourceTransaction: lib_AIConnector.Anthropic.UploadFile
+    ↓file [variables.StepVariable-1791810056489]: 
+      comment: Resolved uploaded file path, from Build_FilePath
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791812989184
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓metadata [variables.StepVariable-1791810056491]: 
+      comment: 'Multipart metadata part: JSON with the file name, from Build_Metadata'
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810081273
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_x_api_key [variables.StepVariable-1791810056493]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810077175
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_FileId [steps.SimpleSourceStep-1791810077300]: 
+    comment: Extracts the Anthropic file_id from the UploadFile transaction document, exposed as the uploadFileId JS variable used by prepare.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791810056487
+          - java.lang.String: 
+            - ↑value: ./document/object/id/text()
+    variableName: uploadFileId
 ↓prepare [steps.SimpleStep-1791565379244]: 
-  comment: Builds the Anthropic Messages request. PDFs go through the Anthropic Files API (multipart upload with beta header, then file_id reference); images stay inline base64 (Messages API accepts no image file reference).
+  comment: Builds the Anthropic Messages request from the sequence scope. PDFs are uploaded by the Call_UploadFile transaction step (Anthropic Files API, multipart by the HTTP connector) and referenced by file_id; images stay inline base64 (Messages API accepts no image file reference).
   expression: |
     '// Builds the Anthropic /v1/messages request.
-    // PDFs go through the Anthropic Files API; images stay inline base64 (API limitation).
-    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
-    var key = String(api_key || '''').trim();
-    if (key == '''') {
-      (__header_x_api_key = ''${lib_AIConnector.anthropic_apikey.secret=}'') == '''';
-    } else {
-      (__header_x_api_key = key) == '''';
-    }
+    // PDFs: uploaded through the Anthropic connector UploadFile transaction (file_id in uploadFileId). Images: inline base64 (API limitation).
     (__header_anthropic_version = ''2023-06-01'') == '''';
     var uc;
     var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var rf = new java.io.File(fp);
+      if (!rf.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var r1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var r2 = new java.io.File(pd + ''/'' + fp);
+        fp = r1.exists() ? String(r1.getAbsolutePath()) : (r2.exists() ? String(r2.getAbsolutePath()) : fp);
+      }
+    }
     if (fp == '''') {
       uc = String(prompt);
     } else {
@@ -27,46 +110,10 @@ comment: |
         var ext = fp.toLowerCase().replace(/.*\./, '''');
         mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      var fname = String(new java.io.File(fp).getName());
-      var fbos = new java.io.ByteArrayOutputStream();
-      var ffis = new java.io.FileInputStream(fp);
-      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var fn;
-      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
-      ffis.close();
-      var fbytes = fbos.toByteArray();
       if (mime == ''application/pdf'') {
-        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
-        var bos = new java.io.ByteArrayOutputStream();
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{"filename":"'' + fname + ''"}\r\n''));
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
-        bos.write(fbytes);
-        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
-        var conn = new java.net.URL(''https://api.anthropic.com/v1/files'').openConnection();
-        conn.setRequestMethod(''POST'');
-        conn.setDoOutput(true);
-        conn.setRequestProperty(''x-api-key'', String(__header_x_api_key));
-        conn.setRequestProperty(''anthropic-version'', ''2023-06-01'');
-        conn.setRequestProperty(''anthropic-beta'', ''files-api-2025-04-14'');
-        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
-        conn.setFixedLengthStreamingMode(bos.size());
-        var os = conn.getOutputStream();
-        os.write(bos.toByteArray());
-        os.flush();
-        os.close();
-        var fcode = conn.getResponseCode();
-        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
-        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
-        var sb = new java.lang.StringBuilder();
-        var ln;
-        while ((ln = rd.readLine()) != null) { sb.append(ln); }
-        rd.close();
-        var fres = String(sb.toString());
-        if (fcode < 200 || fcode >= 300) { throw new Error(''Anthropic Files upload failed (HTTP '' + fcode + ''): '' + fres); }
-        var fileId = String(JSON.parse(fres).id);
-        uc = [{ type: ''document'', source: { type: ''file'', file_id: fileId } }, { type: ''text'', text: String(prompt) }];
+        uc = [{ type: ''document'', source: { type: ''file'', file_id: String(uploadFileId) } }, { type: ''text'', text: String(prompt) }];
       } else {
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(new java.io.FileInputStream(fp).readAllBytes()));
         uc = [{ type: ''image'', source: { type: ''base64'', media_type: mime, data: b64 } }, { type: ''text'', text: String(prompt) }];
       }
     }
@@ -83,7 +130,15 @@ comment: |
   ↓__body [variables.StepVariable-1791565388539]: 
     comment: JSON request body (model, max_tokens, system, messages), from the JavaScript scope (prepare)
   ↓__header_x_api_key [variables.StepVariable-1791565391805]: 
-    comment: Anthropic API key, from the JavaScript scope (prepare)
+    comment: Anthropic API key, from Build_Auth
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791810077175
+          - java.lang.String: 
+            - ↑value: ./text()
     value: 
       - ↑ciphered: true
       - ↑traceable: false

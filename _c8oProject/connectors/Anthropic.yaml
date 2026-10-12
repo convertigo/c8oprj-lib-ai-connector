@@ -35,3 +35,30 @@ trustAllServerCertificates: false
     comment: anthropic-version header (2023-06-01), from the AnthropicMessage sequence (JS scope)
     httpName: anthropic-version
     value: 2023-06-01
+↓UploadFile [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/files: Anthropic Files API upload (beta, multipart). The connector streams the file as a binary part. JsonHttpTransaction parses the response so the sequence can extract the id (file_id).'
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: files
+  ↓metadata [variables.RequestableHttpVariable-1791810018345]: 
+    httpMethod: POST
+    httpName: metadata
+  ↓file [variables.RequestableHttpVariable-1791810018347]: 
+    doFileUploadContentType: application/pdf
+    doFileUploadMode: multipartFormData
+    httpMethod: POST
+    httpName: file
+    isFileUpload: true
+  ↓__header_x_api_key [variables.RequestableHttpVariable-1791810018349]: 
+    httpName: x-api-key
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_anthropic_version [variables.RequestableHttpVariable-1791810018351]: 
+    httpName: anthropic-version
+    value: 2023-06-01
+  ↓__header_anthropic_beta [variables.RequestableHttpVariable-1791810018353]: 
+    httpName: anthropic-beta
+    value: files-api-2025-04-14

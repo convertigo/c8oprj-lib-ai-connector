@@ -1,20 +1,185 @@
+accessibility: Private
 comment: |
   'Chat completion through the Google Gemini API (official OpenAI-compatible endpoint /v1beta/openai/chat/completions).
   
   Variables: prompt (required), model (default gemini-2.5-flash), system, temperature, max_tokens, api_key (empty = lib_AIConnector.gemini_apikey.secret symbol).
   
   Returns the provider response document (choices[0].message.content holds the answer).'
+↓Build_Mime [steps.ElementStep-1791810111760]: 
+  comment: Builds the uploaded file MIME type (file_type or guessed from the extension) as a hidden element used by the upload steps.
+  expression: |
+    'var fp = String(file || '''').trim();
+    var mime = String(file_type || '''').trim();
+    if (mime == '''' && fp != '''') {
+      var ext = fp.toLowerCase().replace(/.*\./, '''');
+      mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+    }
+    mime'
+  nodeName: Mime
+  output: false
+↓Build_Key [steps.ElementStep-1791810111885]: 
+  comment: Builds the Gemini API key value (api_key or lib_AIConnector.gemini_apikey.secret symbol) as a hidden element used as source for the x-goog-api-key headers and the chat Authorization header.
+  expression: 'String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.gemini_apikey.secret=}'').trim()'
+  nodeName: Key
+  output: false
+↓Build_UploadBody [steps.ElementStep-1791810127478]: 
+  comment: Builds the Gemini upload session body (file display_name JSON) as a hidden element used as source by Call_UploadStart.
+  expression: |
+    'var fp = String(file || '''').trim();
+    var nm = fp == '''' ? ''upload'' : String(new java.io.File(fp).getName());
+    JSON.stringify({ file: { display_name: nm } })'
+  nodeName: UploadBody
+  output: false
+↓Build_FilePath [steps.ElementStep-1791810181219]: 
+  comment: Resolves the uploaded file path (relative paths in test cases are resolved against the Convertigo projects directory) as a hidden element used as the Call_UploadFile __body source (raw binary body).
+  expression: |
+    'var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var f = new java.io.File(fp);
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var c2 = new java.io.File(pd + ''/'' + fp);
+        fp = c1.exists() ? String(c1.getAbsolutePath()) : (c2.exists() ? String(c2.getAbsolutePath()) : fp);
+      }
+    }
+    fp'
+  nodeName: FilePath
+  output: false
+↓If_File [steps.IfStep-1791810123347]: 
+  comment: Runs the Gemini Files API upload only when a file was provided.
+  condition: String(file || '').trim() != ''
+  ↓Call_UploadStart [steps.TransactionStep-1791810134422]: 
+    comment: 'Calls the Gemini connector UploadStart transaction: opens a resumable upload session (x-goog-upload-command=start). The response x-goog-upload-url header gives the upload target.'
+    sourceTransaction: lib_AIConnector.Gemini.UploadStart
+    ↓__uri [variables.StepVariable-1791810134427]: 
+      comment: Absolute upload session URL (generativelanguage.googleapis.com/upload/v1beta/files)
+      value: https://generativelanguage.googleapis.com/upload/v1beta/files
+    ↓__body [variables.StepVariable-1791810134429]: 
+      comment: Upload session JSON body (display_name), from Build_UploadBody
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810127478
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_x_goog_api_key [variables.StepVariable-1791810134431]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810111885
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+    ↓__header_x_goog_upload_protocol [variables.StepVariable-1791810134433]: 
+      value: resumable
+    ↓__header_x_goog_upload_command [variables.StepVariable-1791810134435]: 
+      value: start
+    ↓__header_x_goog_upload_content_type [variables.StepVariable-1791810134437]: 
+      comment: File MIME type, from Build_Mime
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810111760
+            - java.lang.String: 
+              - ↑value: ./text()
+  ↓Get_UploadUrl [steps.SimpleSourceStep-1791810142795]: 
+    comment: Extracts the resumable upload URL from the UploadStart response headers (httpInfo, header names are case-insensitive), exposed as the geminiUploadUrl JS variable used by Call_UploadFile.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791810134422
+          - java.lang.String: 
+            - ↑value: ./document/HttpInfo/responseHeaders/header[translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='x-goog-upload-url']/@value
+    variableName: geminiUploadUrl
+  ↓Build_UploadUri [steps.ElementStep-1791810152242]: 
+    comment: Copies the resumable upload URL captured by Get_UploadUrl as a hidden element used as the Call_UploadFile __uri source.
+    expression: String(geminiUploadUrl)
+    nodeName: UploadUri
+    output: false
+  ↓Call_UploadFile [steps.TransactionStep-1791810146677]: 
+    comment: 'Calls the Gemini connector UploadFile transaction: the HTTP connector streams the file binary as the request body to the resumable upload URL (x-goog-upload-command=upload, finalize).'
+    sourceTransaction: lib_AIConnector.Gemini.UploadFile
+    ↓__uri [variables.StepVariable-1791810146680]: 
+      comment: Resumable upload URL from the UploadStart response, from Build_UploadUri
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810152242
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__body [variables.StepVariable-1791810146682]: 
+      comment: Uploaded file temp path (raw binary body), from Build_FilePath
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810181219
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__contentType [variables.StepVariable-1791810146684]: 
+      comment: File MIME type, from Build_Mime
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810111760
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_x_goog_api_key [variables.StepVariable-1791810146686]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791810111885
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_FileUri [steps.SimpleSourceStep-1791810181590]: 
+    comment: Extracts the uploaded file URI from the UploadFile transaction response (file.uri), exposed as the geminiFileUri JS variable used by prepare.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791810146677
+          - java.lang.String: 
+            - ↑value: ./document/text()
+    variableName: geminiUploadResponse
 ↓prepare [steps.SimpleStep-1791565455624]: 
-  comment: 'Builds the Gemini OpenAI-compatible chat/completions request. Uploaded files go through the Gemini Files API (resumable upload, up to 2GB) and are referenced by their file URI: no base64 in the chat request.'
+  comment: Builds the Gemini chat/completions request from the sequence scope. Uploaded files are streamed by the UploadStart/UploadFile transaction steps (Gemini resumable Files API, binary body sent by the HTTP connector); the UploadFile JSON response is parsed here to get the file URI. No base64 and no Java networking in the chat request.
   expression: |
     '// Builds the Gemini request through the official OpenAI-compatible endpoint.
-    // Uploaded files go through the Gemini Files API (resumable upload -> file URI).
-    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
-    var key = String(api_key || '''').trim();
-    if (key == '''') {
-      key = String(''${lib_AIConnector.gemini_apikey.secret=}'').trim();
+    // Uploaded files: URI parsed from the UploadFile transaction JSON response.
+    var geminiFileUri = '''';
+    var gur = (typeof geminiUploadResponse == ''undefined'') ? '''' : geminiUploadResponse;
+    if (String(gur || '''').trim() != '''') {
+      try {
+        var resp = JSON.parse(String(gur));
+        geminiFileUri = String(resp.file && resp.file.uri ? resp.file.uri : '''');
+      } catch (e) { geminiFileUri = ''''; }
     }
-    (__header_Authorization = ''Bearer '' + key) == '''';
     var messages = [];
     if (String(system || '''') != '''') {
       messages.push({ role: ''system'', content: String(system) });
@@ -24,57 +189,7 @@ comment: |
     if (fp == '''') {
       uc = String(prompt);
     } else {
-      var mime = String(file_type || '''').trim();
-      if (mime == '''') {
-        var ext = fp.toLowerCase().replace(/.*\./, '''');
-        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
-      }
-      var fname = String(new java.io.File(fp).getName());
-      var fbos = new java.io.ByteArrayOutputStream();
-      var ffis = new java.io.FileInputStream(fp);
-      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var fn;
-      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
-      ffis.close();
-      var fbytes = fbos.toByteArray();
-      var flen = fbytes.length;
-      var c1 = new java.net.URL(''https://generativelanguage.googleapis.com/upload/v1beta/files'').openConnection();
-      c1.setRequestMethod(''POST'');
-      c1.setDoOutput(true);
-      c1.setRequestProperty(''x-goog-api-key'', key);
-      c1.setRequestProperty(''x-goog-upload-protocol'', ''resumable'');
-      c1.setRequestProperty(''x-goog-upload-command'', ''start'');
-      c1.setRequestProperty(''x-goog-upload-header-content-length'', String(flen));
-      c1.setRequestProperty(''x-goog-upload-header-content-type'', mime);
-      c1.setRequestProperty(''Content-Type'', ''application/json'');
-      var b1 = J(''{"file":{"display_name":"'' + fname + ''"}}'');
-      c1.setFixedLengthStreamingMode(b1.length);
-      var o1 = c1.getOutputStream();
-      o1.write(b1); o1.flush(); o1.close();
-      var upUrl = String(c1.getHeaderField(''x-goog-upload-url''));
-      if (upUrl == ''null'' || upUrl == '''') { throw new Error(''Gemini Files start failed (HTTP '' + c1.getResponseCode() + '')''); }
-      var c2 = new java.net.URL(upUrl).openConnection();
-      c2.setRequestMethod(''POST'');
-      c2.setDoOutput(true);
-      c2.setRequestProperty(''x-goog-api-key'', key);
-      c2.setRequestProperty(''x-goog-upload-command'', ''upload, finalize'');
-      c2.setRequestProperty(''x-goog-upload-offset'', ''0'');
-      c2.setRequestProperty(''Content-Type'', mime);
-      c2.setFixedLengthStreamingMode(flen);
-      var o2 = c2.getOutputStream();
-      o2.write(fbytes); o2.flush(); o2.close();
-      var fcode = c2.getResponseCode();
-      var ris = (fcode >= 200 && fcode < 300) ? c2.getInputStream() : c2.getErrorStream();
-      var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
-      var sb = new java.lang.StringBuilder();
-      var ln;
-      while ((ln = rd.readLine()) != null) { sb.append(ln); }
-      rd.close();
-      var fres = String(sb.toString());
-      if (fcode < 200 || fcode >= 300) { throw new Error(''Gemini Files upload failed (HTTP '' + fcode + ''): '' + fres); }
-      var fileObj = JSON.parse(fres).file;
-      var uri = String(fileObj.uri);
-      uc = [{ type: ''image_url'', image_url: { url: uri } }, { type: ''text'', text: String(prompt) }];
+      uc = [{ type: ''image_url'', image_url: { url: geminiFileUri } }, { type: ''text'', text: String(prompt) }];
     }
     messages.push({ role: ''user'', content: uc });
     var modelId = String(model || '''');

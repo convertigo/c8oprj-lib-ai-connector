@@ -1,4 +1,5 @@
 baseDir: /v1/
+comment: OpenAI-compatible HTTP connector. Default origin api.openai.com/v1 (ChatCompletions, UploadFile for the Files API).
 https: true
 port: 443
 server: api.openai.com
@@ -32,3 +33,25 @@ trustAllServerCertificates: false
     visibility: 15
 ↓Default_transaction [transactions.HttpTransaction]: 
   ↑default: true
+↓UploadFile [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/files: OpenAI Files API upload (multipart). The connector streams the file as a binary part (variable file, Do File Upload Mode = multipartFormData). JsonHttpTransaction parses the response so the sequence can extract the id (file_id).'
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: files
+  ↓purpose [variables.RequestableHttpVariable-1791810009230]: 
+    httpMethod: POST
+    httpName: purpose
+    value: user_data
+  ↓file [variables.RequestableHttpVariable-1791810009232]: 
+    doFileUploadContentType: application/pdf
+    doFileUploadMode: multipartFormData
+    httpMethod: POST
+    httpName: file
+    isFileUpload: true
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791810009234]: 
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15

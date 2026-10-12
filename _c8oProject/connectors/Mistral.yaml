@@ -32,3 +32,62 @@ trustAllServerCertificates: false
       - ↑traceable: false
       - →→: xd8e180806a1c1d83a6255212121ab827
     visibility: 15
+↓FileUrl [transactions.JsonHttpTransaction]: 
+  comment: 'GET /v1/files/{file_id}/url: returns the signed URL of an uploaded Mistral file (used before OCR).'
+  subDir: files/{file_id}/url
+  ↓file_id [variables.RequestableHttpVariable-1791809086668]: 
+    httpName: file_id
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791809086670]: 
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓Ocr [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/ocr: Mistral OCR extraction (model mistral-ocr-latest, document pointing to the signed file URL). Body passed through __body.'
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: ocr
+  ↓__body [variables.RequestableHttpVariable-1791809090997]: 
+    httpMethod: POST
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791809090999]: 
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓UploadFile [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/files: Mistral Files API upload (purpose=ocr, multipart). The connector streams the file as a binary part. JsonHttpTransaction parses the response so the sequence can extract the id.'
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: files
+  ↓purpose [variables.RequestableHttpVariable-1791810018140]: 
+    httpMethod: POST
+    httpName: purpose
+    value: ocr
+  ↓file [variables.RequestableHttpVariable-1791810018142]: 
+    doFileUploadContentType: application/pdf
+    doFileUploadMode: multipartFormData
+    httpMethod: POST
+    httpName: file
+    isFileUpload: true
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791810018145]: 
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15

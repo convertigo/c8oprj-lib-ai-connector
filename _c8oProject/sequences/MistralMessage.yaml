@@ -1,29 +1,184 @@
+accessibility: Private
 comment: |
   'Chat completion through the Mistral AI API (api.mistral.ai, OpenAI-compatible /v1/chat/completions).
   
   Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol).
   
   Returns the provider response document (choices[0].message.content holds the answer).'
+↓Build_Auth [steps.ElementStep-1791797058092]: 
+  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.mistral_apikey.secret symbol) as a hidden element used as source by Call_ChatCompletions.
+  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.mistral_apikey.secret=}'').trim())'
+  nodeName: Auth
+  output: false
+↓Build_Mime [steps.ElementStep-1791811903983]: 
+  comment: Builds the uploaded file MIME type (file_type or guessed from the extension) as a hidden element used by the Mistral upload and chat steps.
+  expression: |
+    'var fp = String(file || '''').trim();
+    var mime = String(file_type || '''').trim();
+    if (mime == '''' && fp != '''') {
+      var ext = fp.toLowerCase().replace(/.*\./, '''');
+      mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+    }
+    mime'
+  nodeName: Mime
+  output: false
+↓Build_FilePath [steps.ElementStep-1791811907111]: 
+  comment: Resolves the uploaded file path (relative paths in test cases are resolved against the Convertigo projects directory) as a hidden element used as the Call_UploadFile file variable source (the connector streams the binary as a multipart part).
+  expression: |
+    'var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var f = new java.io.File(fp);
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var c2 = new java.io.File(pd + ''/'' + fp);
+        fp = c1.exists() ? String(c1.getAbsolutePath()) : (c2.exists() ? String(c2.getAbsolutePath()) : fp);
+      }
+    }
+    fp'
+  nodeName: FilePath
+  output: false
+↓If_Pdf [steps.IfStep-1791811910068]: 
+  comment: Runs the Mistral Files API + OCR pipeline only when a PDF file was provided (images stay inline base64 in the chat request).
+  condition: String(file || '').trim() != '' && /\.pdf\s*$/i.test(String(file_type || '') + ' ' + String(file || ''))
+  ↓Call_UploadFile [steps.TransactionStep-1791811913056]: 
+    comment: 'Calls the Mistral connector UploadFile transaction (Files API, purpose=ocr): the HTTP connector streams the PDF binary as a multipart part. JsonHttpTransaction parses the response so the file id can be extracted.'
+    output: true
+    sourceTransaction: lib_AIConnector.Mistral.UploadFile
+    ↓file [variables.StepVariable-1791811913064]: 
+      comment: Uploaded file temp path, from Build_FilePath
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791811907111
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_Authorization [variables.StepVariable-1791811913066]: 
+      comment: Bearer Mistral API key header, from Build_Auth
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791797058092
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_FileId [steps.SimpleSourceStep-1791811922078]: 
+    comment: Extracts the uploaded Mistral file id from the UploadFile transaction response, exposed as the file_id JS variable (same name as the Call_FileUrl transaction variable).
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791811913056
+          - java.lang.String: 
+            - ↑value: ./document/object/id/text()
+    variableName: file_id
+  ↓Call_FileUrl [steps.TransactionStep-1791811931053]: 
+    comment: 'Calls the Mistral connector FileUrl transaction: GET /v1/files/{file_id}/url returns the signed URL of the uploaded PDF (used by OCR).'
+    output: true
+    sourceTransaction: lib_AIConnector.Mistral.FileUrl
+    ↓file_id [variables.StepVariable-1791811931055]: 
+      comment: Uploaded file id, from the JavaScript scope (Get_FileId)
+    ↓__header_Authorization [variables.StepVariable-1791811931057]: 
+      comment: Bearer Mistral API key header, from Build_Auth
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791797058092
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_SignedUrl [steps.SimpleSourceStep-1791811937133]: 
+    comment: Extracts the signed file URL from the FileUrl transaction response, exposed as the mistralSignedUrl JS variable used by Build_OcrBody.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791811931053
+          - java.lang.String: 
+            - ↑value: ./document/object/url/text()
+    variableName: mistralSignedUrl
+  ↓Build_OcrBody [steps.ElementStep-1791811940111]: 
+    comment: Builds the Mistral OCR request JSON (model mistral-ocr-latest, document_url pointing to the signed file URL) as a hidden element used as the Call_Ocr __body source.
+    expression: 'JSON.stringify({ model: ''mistral-ocr-latest'', document: { type: ''document_url'', document_url: String(mistralSignedUrl) } })'
+    nodeName: OcrBody
+    output: false
+  ↓Call_Ocr [steps.TransactionStep-1791811944201]: 
+    comment: 'Calls the Mistral connector Ocr transaction: POST /v1/ocr extracts the PDF text (model mistral-ocr-latest). The response pages[].markdown are concatenated by Get_OcrText.'
+    output: true
+    sourceTransaction: lib_AIConnector.Mistral.Ocr
+    ↓__body [variables.StepVariable-1791811944203]: 
+      comment: OCR request JSON, from Build_OcrBody
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791811940111
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_Authorization [variables.StepVariable-1791811944205]: 
+      comment: Bearer Mistral API key header, from Build_Auth
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791797058092
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_OcrText [steps.SimpleSourceStep-1791811963785]: 
+    comment: Extracts the OCR markdown text from the Ocr transaction response (all pages; pages is an array attribute without an array element wrapper), exposed as the mistralOcrText JS variable used by prepare.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791811944201
+          - java.lang.String: 
+            - ↑value: ./document/object/pages/object/markdown/text()
+    variableName: mistralOcrText
 ↓prepare [steps.SimpleStep-1791566386616]: 
-  comment: 'Builds the Mistral chat/completions request. PDFs go through the Mistral Files API (purpose=ocr), then text extraction with POST /v1/ocr (mistral-ocr-latest, document_url pointing to the signed file URL): the chat request carries only text. Images stay inline base64 data URLs (vision models only).'
+  comment: Builds the Mistral chat/completions request. PDFs are uploaded and OCR-extracted by the connector transaction steps (Files API + /v1/ocr, no Java networking); the extracted markdown arrives here through the mistralOcrText JS variable. Images stay inline base64 data URLs (vision models only, local file read only).
   expression: |
     '// Builds the Mistral /v1/chat/completions request.
-    // PDFs: Files API upload (purpose=ocr) + signed URL + POST /v1/ocr extraction. Images: inline base64 (vision models only).
-    var J = function(s) { return new java.lang.String(s).getBytes(''UTF-8''); };
-    var key = String(api_key || '''').trim();
-    var auth;
-    if (key == '''') {
-      auth = ''Bearer ${lib_AIConnector.mistral_apikey.secret=}'';
-    } else {
-      auth = ''Bearer '' + key;
-    }
-    (__header_Authorization = auth) == '''';
+    // PDFs: connector transactions (Files API + OCR) leave the extracted markdown in mistralOcrText.
+    // Images: inline base64 (local file read only, no networking).
     var messages = [];
     if (String(system || '''') != '''') {
       messages.push({ role: ''system'', content: String(system) });
     }
     var uc;
     var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var rf = new java.io.File(fp);
+      if (!rf.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var r1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var r2 = new java.io.File(pd + ''/'' + fp);
+        fp = r1.exists() ? String(r1.getAbsolutePath()) : (r2.exists() ? String(r2.getAbsolutePath()) : fp);
+      }
+    }
     if (fp == '''') {
       uc = String(prompt);
     } else {
@@ -32,76 +187,22 @@ comment: |
         var ext = fp.toLowerCase().replace(/.*\./, '''');
         mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
       }
-      var fname = String(new java.io.File(fp).getName());
-      var fbos = new java.io.ByteArrayOutputStream();
-      var ffis = new java.io.FileInputStream(fp);
-      var fbuf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
-      var fn;
-      while ((fn = ffis.read(fbuf)) != -1) { fbos.write(fbuf, 0, fn); }
-      ffis.close();
-      var fbytes = fbos.toByteArray();
       if (mime == ''application/pdf'') {
-        var boundary = ''----c8o'' + String(java.lang.System.currentTimeMillis());
-        var bos = new java.io.ByteArrayOutputStream();
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nocr\r\n''));
-        bos.write(J(''--'' + boundary + ''\r\nContent-Disposition: form-data; name="file"; filename="'' + fname + ''"\r\nContent-Type: application/pdf\r\n\r\n''));
-        bos.write(fbytes);
-        bos.write(J(''\r\n--'' + boundary + ''--\r\n''));
-        var conn = new java.net.URL(''https://api.mistral.ai/v1/files'').openConnection();
-        conn.setRequestMethod(''POST'');
-        conn.setDoOutput(true);
-        conn.setRequestProperty(''Authorization'', auth);
-        conn.setRequestProperty(''Content-Type'', ''multipart/form-data; boundary='' + boundary);
-        conn.setFixedLengthStreamingMode(bos.size());
-        var os = conn.getOutputStream();
-        os.write(bos.toByteArray()); os.flush(); os.close();
-        var fcode = conn.getResponseCode();
-        var ris = (fcode >= 200 && fcode < 300) ? conn.getInputStream() : conn.getErrorStream();
-        var rd = new java.io.BufferedReader(new java.io.InputStreamReader(ris, ''UTF-8''));
-        var sb = new java.lang.StringBuilder();
-        var ln;
-        while ((ln = rd.readLine()) != null) { sb.append(ln); }
-        rd.close();
-        var fres = String(sb.toString());
-        if (fcode < 200 || fcode >= 300) { throw new Error(''Mistral Files upload failed (HTTP '' + fcode + ''): '' + fres); }
-        var fileId = String(JSON.parse(fres).id);
-        var cu = new java.net.URL(''https://api.mistral.ai/v1/files/'' + fileId + ''/url'').openConnection();
-        cu.setRequestProperty(''Authorization'', auth);
-        var curd = new java.io.BufferedReader(new java.io.InputStreamReader(cu.getInputStream(), ''UTF-8''));
-        var cusb = new java.lang.StringBuilder();
-        var culn;
-        while ((culn = curd.readLine()) != null) { cusb.append(culn); }
-        curd.close();
-        var signedUrl = String(JSON.parse(String(cusb.toString())).url);
-        var ocrBody = JSON.stringify({ model: ''mistral-ocr-latest'', document: { type: ''document_url'', document_url: signedUrl } });
-        var conn2 = new java.net.URL(''https://api.mistral.ai/v1/ocr'').openConnection();
-        conn2.setRequestMethod(''POST'');
-        conn2.setDoOutput(true);
-        conn2.setRequestProperty(''Authorization'', auth);
-        conn2.setRequestProperty(''Content-Type'', ''application/json'');
-        var ob = J(ocrBody);
-        conn2.setFixedLengthStreamingMode(ob.length);
-        var os2 = conn2.getOutputStream();
-        os2.write(ob); os2.flush(); os2.close();
-        var ocode = conn2.getResponseCode();
-        var ris2 = (ocode >= 200 && ocode < 300) ? conn2.getInputStream() : conn2.getErrorStream();
-        var rd2 = new java.io.BufferedReader(new java.io.InputStreamReader(ris2, ''UTF-8''));
-        var sb2 = new java.lang.StringBuilder();
-        var ln2;
-        while ((ln2 = rd2.readLine()) != null) { sb2.append(ln2); }
-        rd2.close();
-        var ores = String(sb2.toString());
-        if (ocode < 200 || ocode >= 300) { throw new Error(''Mistral OCR failed (HTTP '' + ocode + ''): '' + ores); }
-        var md = '''';
-        try {
-          var pj = JSON.parse(ores);
-          if (pj.pages != null) {
-            for (var pi = 0; pi < pj.pages.length; pi++) { md += String(pj.pages[pi].markdown) + ''\n\n''; }
-          } else { md = ores; }
-        } catch (e) { md = ores; }
-        uc = ''Document content (extracted with OCR):\n'' + md + ''\n\n'' + String(prompt);
+        var ocr = '''';
+        var ot = (typeof mistralOcrText == ''undefined'') ? '''' : mistralOcrText;
+        if (ot != null && String(ot).trim() != '''') {
+          if (ot instanceof java.lang.Object && ot instanceof org.w3c.dom.NodeList) {
+            for (var i = 0; i < ot.getLength(); i++) { ocr += String(ot.item(i).getNodeValue()) + ''\n\n''; }
+          } else {
+            ocr = String(ot);
+          }
+        }
+        uc = ''Document content (extracted with OCR):\n'' + ocr + ''\n\n'' + String(prompt);
       } else {
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(fbytes));
+        var fis = new java.io.FileInputStream(fp);
+        var bytes = fis.readAllBytes();
+        fis.close();
+        var b64 = String(java.util.Base64.getEncoder().encodeToString(bytes));
         uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
       }
     }
@@ -114,11 +215,6 @@ comment: |
     var mt = Number(max_tokens);
     if (String(max_tokens || '''') != '''' && !isNaN(mt)) { body.max_tokens = mt; }
     __body = JSON.stringify(body);'
-↓Build_Auth [steps.ElementStep-1791797058092]: 
-  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.mistral_apikey.secret symbol) as a hidden element used as source by Call_ChatCompletions.
-  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.mistral_apikey.secret=}'').trim())'
-  nodeName: Auth
-  output: false
 ↓Call_ChatCompletions [steps.TransactionStep-1791566390634]: 
   comment: Calls the Mistral ChatCompletions transaction (OpenAI-compatible POST).
   sourceTransaction: lib_AIConnector.Mistral.ChatCompletions

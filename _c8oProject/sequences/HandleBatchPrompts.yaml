@@ -1,3 +1,4 @@
+accessibility: Private
 responseTimeout: 3600
 ↓Read_CSV [steps.ReadCSVStep-1673631617276]: 
   dataFile: '".//csv/prompts-GPT.csv"'
