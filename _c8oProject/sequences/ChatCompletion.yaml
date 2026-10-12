@@ -39,7 +39,7 @@ comment: |
   nodeName: FilePath
   output: false
 ↓If_Pdf [steps.IfStep-1791809914527]: 
-  comment: 'Runs the OpenAI Files API upload only for PDF files (images stay inline base64: OpenAI file parts require application/pdf).'
+  comment: 'Runs the OpenAI Files API upload only for PDF files (OpenAI chat/completions file parts require application/pdf). Image files are rejected in Build_Body (no base64): use AIChat, which routes images to OpenAIResponses.'
   condition: 'var fp = String(file || '''').trim(); if (fp == '''') { false; } else { var mt = String(file_type || '''').trim(); if (mt == '''') { mt = fp.toLowerCase().replace(/.*\./, '''') == ''pdf'' ? ''application/pdf'' : ''image/png''; } mt == ''application/pdf''; }'
   ↓Call_UploadFile [steps.TransactionStep-1791809922000]: 
     comment: 'Calls the AI connector UploadFile transaction: the HTTP connector streams the PDF as a multipart file part to the OpenAI Files API (no manual multipart in JS).'
@@ -82,7 +82,7 @@ comment: |
             - ↑value: ./document/object/id/text()
     variableName: uploadFileId
 ↓Build_Body [steps.ElementStep-1791797025703]: 
-  comment: 'Builds the chat/completions JSON body from the sequence scope: messages (with the uploaded PDF file_id when a PDF was provided), model, temperature, max_tokens. Runs after Call_UploadFile so uploadFileId is available.'
+  comment: 'Builds the chat/completions JSON body from the sequence scope: messages (with the uploaded PDF file_id when a PDF was provided), model, temperature, max_tokens. Runs after Call_UploadFile so uploadFileId is available. Image files are rejected (no base64): use AIChat, which routes images to OpenAIResponses.'
   expression: |
     'var m = [];
     if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
@@ -108,8 +108,7 @@ comment: |
       if (mime == ''application/pdf'') {
         uc = [{ type: ''file'', file: { file_id: String(uploadFileId) } }, { type: ''text'', text: String(prompt) }];
       } else {
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(new java.io.FileInputStream(fp).readAllBytes()));
-        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
+        throw ''Image files are not supported in ChatCompletion without base64: use AIChat (routes images to OpenAIResponses, binary Files API pipeline).'';
       }
     }
     m.push({ role: ''user'', content: uc });

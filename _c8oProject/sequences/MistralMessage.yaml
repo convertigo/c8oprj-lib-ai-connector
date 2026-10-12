@@ -2,9 +2,9 @@ accessibility: Private
 comment: |
   'Chat completion through the Mistral AI API (api.mistral.ai, OpenAI-compatible /v1/chat/completions).
   
-  Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol).
+  Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol), file, file_type.
   
-  Returns the provider response document (choices[0].message.content holds the answer).'
+  Files are uploaded in binary through the Mistral Files API (multipart, no base64 in memory): images use the signed URL as image_url (vision models), PDFs are OCR-extracted first (mistral-ocr-latest). Returns the provider response document (choices[0].message.content holds the answer).'
 ↓Build_Auth [steps.ElementStep-1791797058092]: 
   comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.mistral_apikey.secret symbol) as a hidden element used as source by Call_ChatCompletions.
   expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.mistral_apikey.secret=}'').trim())'
@@ -38,9 +38,9 @@ comment: |
     fp'
   nodeName: FilePath
   output: false
-↓If_Pdf [steps.IfStep-1791811910068]: 
-  comment: Runs the Mistral Files API + OCR pipeline only when a PDF file was provided (images stay inline base64 in the chat request).
-  condition: String(file || '').trim() != '' && /\.pdf\s*$/i.test(String(file_type || '') + ' ' + String(file || ''))
+↓If_File [steps.IfStep-1791811910068]: 
+  comment: 'Runs the Mistral Files API pipeline when a file is provided: binary multipart upload + signed URL (no base64 in memory). PDFs are then OCR-extracted (nested If_Pdf); images use the signed URL in the chat request (see prepare).'
+  condition: String(file || '').trim() != ''
   ↓Call_UploadFile [steps.TransactionStep-1791811913056]: 
     comment: 'Calls the Mistral connector UploadFile transaction (Files API, purpose=ocr): the HTTP connector streams the PDF binary as a multipart part. JsonHttpTransaction parses the response so the file id can be extracted.'
     output: true
@@ -103,7 +103,7 @@ comment: |
         - →→: xd8e180806a1c1d83a6255212121ab827
       visibility: 15
   ↓Get_SignedUrl [steps.SimpleSourceStep-1791811937133]: 
-    comment: Extracts the signed file URL from the FileUrl transaction response, exposed as the mistralSignedUrl JS variable used by Build_OcrBody.
+    comment: Extracts the signed file URL from the FileUrl transaction response, exposed as the mistralSignedUrl JS variable used by Build_OcrBody (PDFs) and prepare (images).
     sourceDefinition: 
       - xmlizable: 
         - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
@@ -113,57 +113,61 @@ comment: |
           - java.lang.String: 
             - ↑value: ./document/object/url/text()
     variableName: mistralSignedUrl
-  ↓Build_OcrBody [steps.ElementStep-1791811940111]: 
-    comment: Builds the Mistral OCR request JSON (model mistral-ocr-latest, document_url pointing to the signed file URL) as a hidden element used as the Call_Ocr __body source.
-    expression: 'JSON.stringify({ model: ''mistral-ocr-latest'', document: { type: ''document_url'', document_url: String(mistralSignedUrl) } })'
-    nodeName: OcrBody
-    output: false
-  ↓Call_Ocr [steps.TransactionStep-1791811944201]: 
-    comment: 'Calls the Mistral connector Ocr transaction: POST /v1/ocr extracts the PDF text (model mistral-ocr-latest). The response pages[].markdown are concatenated by Get_OcrText.'
-    output: true
-    sourceTransaction: lib_AIConnector.Mistral.Ocr
-    ↓__body [variables.StepVariable-1791811944203]: 
-      comment: OCR request JSON, from Build_OcrBody
+  ↓If_Pdf [steps.IfStep-1791815052458]: 
+    comment: 'PDF only: runs the Mistral OCR pipeline (mistral-ocr-latest) on the uploaded file and extracts the text used by prepare.'
+    condition: String(file || '').trim() != '' && /\.pdf\s*$/i.test(String(file_type || '') + ' ' + String(file || ''))
+    ↓Build_OcrBody [steps.ElementStep-1791811940111]: 
+      comment: Builds the Mistral OCR request JSON (model mistral-ocr-latest, document_url pointing to the signed file URL) as a hidden element used as the Call_Ocr __body source.
+      expression: 'JSON.stringify({ model: ''mistral-ocr-latest'', document: { type: ''document_url'', document_url: String(mistralSignedUrl) } })'
+      nodeName: OcrBody
+      output: false
+    ↓Call_Ocr [steps.TransactionStep-1791811944201]: 
+      comment: 'Calls the Mistral connector Ocr transaction: POST /v1/ocr extracts the PDF text (model mistral-ocr-latest). The response pages[].markdown are concatenated by Get_OcrText.'
+      output: true
+      sourceTransaction: lib_AIConnector.Mistral.Ocr
+      ↓__body [variables.StepVariable-1791811944203]: 
+        comment: OCR request JSON, from Build_OcrBody
+        sourceDefinition: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+            - com.twinsoft.convertigo.beans.common.XMLVector: 
+              - java.lang.String: 
+                - ↑value: 1791811940111
+              - java.lang.String: 
+                - ↑value: ./text()
+      ↓__header_Authorization [variables.StepVariable-1791811944205]: 
+        comment: Bearer Mistral API key header, from Build_Auth
+        sourceDefinition: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+            - com.twinsoft.convertigo.beans.common.XMLVector: 
+              - java.lang.String: 
+                - ↑value: 1791797058092
+              - java.lang.String: 
+                - ↑value: ./text()
+        value: 
+          - ↑ciphered: true
+          - ↑traceable: false
+          - →→: xd8e180806a1c1d83a6255212121ab827
+        visibility: 15
+    ↓Get_OcrText [steps.SimpleSourceStep-1791811963785]: 
+      comment: Extracts the OCR markdown text from the Ocr transaction response (all pages; pages is an array attribute without an array element wrapper), exposed as the mistralOcrText JS variable used by prepare.
       sourceDefinition: 
         - xmlizable: 
           - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
           - com.twinsoft.convertigo.beans.common.XMLVector: 
             - java.lang.String: 
-              - ↑value: 1791811940111
+              - ↑value: 1791811944201
             - java.lang.String: 
-              - ↑value: ./text()
-    ↓__header_Authorization [variables.StepVariable-1791811944205]: 
-      comment: Bearer Mistral API key header, from Build_Auth
-      sourceDefinition: 
-        - xmlizable: 
-          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
-          - com.twinsoft.convertigo.beans.common.XMLVector: 
-            - java.lang.String: 
-              - ↑value: 1791797058092
-            - java.lang.String: 
-              - ↑value: ./text()
-      value: 
-        - ↑ciphered: true
-        - ↑traceable: false
-        - →→: xd8e180806a1c1d83a6255212121ab827
-      visibility: 15
-  ↓Get_OcrText [steps.SimpleSourceStep-1791811963785]: 
-    comment: Extracts the OCR markdown text from the Ocr transaction response (all pages; pages is an array attribute without an array element wrapper), exposed as the mistralOcrText JS variable used by prepare.
-    sourceDefinition: 
-      - xmlizable: 
-        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
-        - com.twinsoft.convertigo.beans.common.XMLVector: 
-          - java.lang.String: 
-            - ↑value: 1791811944201
-          - java.lang.String: 
-            - ↑value: ./document/object/pages/object/markdown/text()
-    variableName: mistralOcrText
+              - ↑value: ./document/object/pages/object/markdown/text()
+      variableName: mistralOcrText
 ↓prepare [steps.SimpleStep-1791566386616]: 
-  comment: Builds the Mistral chat/completions request. PDFs are uploaded and OCR-extracted by the connector transaction steps (Files API + /v1/ocr, no Java networking); the extracted markdown arrives here through the mistralOcrText JS variable. Images stay inline base64 data URLs (vision models only, local file read only).
+  comment: 'Builds the Mistral chat/completions request. Files: connector transactions (Files API upload + signed URL; OCR for PDFs) ran before this step. PDFs: the extracted markdown arrives through the mistralOcrText JS variable. Images: the signed URL is used as image_url (binary pipeline, no base64).'
   expression: |
     '// Builds the Mistral /v1/chat/completions request.
-    // PDFs: connector transactions (Files API + OCR) leave the extracted markdown in mistralOcrText.
-    // Images: inline base64 (local file read only, no networking).
+    // Files: the connector transactions (Files API upload + signed URL, OCR for PDFs) ran before this step.
+    // PDFs: the extracted markdown arrives through the mistralOcrText JS variable.
+    // Images: the signed URL is used as image_url (binary pipeline, no base64).
     var messages = [];
     if (String(system || '''') != '''') {
       messages.push({ role: ''system'', content: String(system) });
@@ -199,11 +203,12 @@ comment: |
         }
         uc = ''Document content (extracted with OCR):\n'' + ocr + ''\n\n'' + String(prompt);
       } else {
-        var fis = new java.io.FileInputStream(fp);
-        var bytes = fis.readAllBytes();
-        fis.close();
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(bytes));
-        uc = [{ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } }, { type: ''text'', text: String(prompt) }];
+        var su = (typeof mistralSignedUrl == ''undefined'' || mistralSignedUrl == null) ? '''' : String(mistralSignedUrl);
+        if (su != '''' && su != ''null'' && su.indexOf(''https://'') == 0) {
+          uc = [{ type: ''image_url'', image_url: { url: su } }, { type: ''text'', text: String(prompt) }];
+        } else {
+          throw ''Mistral image pipeline failed: no signed URL from the Files API upload (no base64 fallback).'';
+        }
       }
     }
     messages.push({ role: ''user'', content: uc });

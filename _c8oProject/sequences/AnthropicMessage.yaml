@@ -2,7 +2,9 @@ accessibility: Private
 comment: |
   'Chat completion through the Anthropic native Messages API (Claude models).
   
-  Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol).
+  Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol), file (optional image or PDF), file_type.
+  
+  Files (PDF and images) go through the Anthropic Files API (binary multipart upload) and are referenced by file_id in the Messages request; no base64.
   
   Returns the provider response document (content[0].text holds the answer).'
 ↓Build_Auth [steps.ElementStep-1791810077175]: 
@@ -34,11 +36,11 @@ comment: |
     fp'
   nodeName: FilePath
   output: false
-↓If_Pdf [steps.IfStep-1791810052388]: 
-  comment: Runs the Anthropic Files API upload only for PDF files (images stay inline base64).
-  condition: 'var fp = String(file || '''').trim(); if (fp == '''') { false; } else { var mt = String(file_type || '''').trim(); if (mt == '''') { mt = fp.toLowerCase().replace(/.*\./, '''') == ''pdf'' ? ''application/pdf'' : ''image/png''; } mt == ''application/pdf''; }'
+↓If_File [steps.IfStep-1791810052388]: 
+  comment: 'Runs the Anthropic Files API upload for every provided file (PDF and images): both are referenced by file_id in the Messages request, no base64.'
+  condition: String(file || '').trim() != ''
   ↓Call_UploadFile [steps.TransactionStep-1791810056487]: 
-    comment: 'Calls the Anthropic connector UploadFile transaction: the HTTP connector streams the PDF as a multipart file part to the Anthropic Files API.'
+    comment: 'Calls the Anthropic connector UploadFile transaction: the HTTP connector streams the file (PDF or image) as a multipart file part to the Anthropic Files API.'
     sourceTransaction: lib_AIConnector.Anthropic.UploadFile
     ↓file [variables.StepVariable-1791810056489]: 
       comment: Resolved uploaded file path, from Build_FilePath
@@ -86,22 +88,13 @@ comment: |
             - ↑value: ./document/object/id/text()
     variableName: uploadFileId
 ↓prepare [steps.SimpleStep-1791565379244]: 
-  comment: Builds the Anthropic Messages request from the sequence scope. PDFs are uploaded by the Call_UploadFile transaction step (Anthropic Files API, multipart by the HTTP connector) and referenced by file_id; images stay inline base64 (Messages API accepts no image file reference).
+  comment: Builds the Anthropic /v1/messages request from the sequence scope. Files (PDF and images) are uploaded by the Call_UploadFile transaction step (Anthropic Files API, multipart by the HTTP connector) and referenced by file_id; no base64 anymore.
   expression: |
     '// Builds the Anthropic /v1/messages request.
-    // PDFs: uploaded through the Anthropic connector UploadFile transaction (file_id in uploadFileId). Images: inline base64 (API limitation).
+    // Files (PDF and images): uploaded through the Anthropic connector UploadFile transaction (file_id in uploadFileId), referenced by file_id. No base64.
     (__header_anthropic_version = ''2023-06-01'') == '''';
     var uc;
     var fp = String(file || '''').trim();
-    if (fp != '''') {
-      var rf = new java.io.File(fp);
-      if (!rf.exists()) {
-        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
-        var r1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
-        var r2 = new java.io.File(pd + ''/'' + fp);
-        fp = r1.exists() ? String(r1.getAbsolutePath()) : (r2.exists() ? String(r2.getAbsolutePath()) : fp);
-      }
-    }
     if (fp == '''') {
       uc = String(prompt);
     } else {
@@ -113,8 +106,7 @@ comment: |
       if (mime == ''application/pdf'') {
         uc = [{ type: ''document'', source: { type: ''file'', file_id: String(uploadFileId) } }, { type: ''text'', text: String(prompt) }];
       } else {
-        var b64 = String(java.util.Base64.getEncoder().encodeToString(new java.io.FileInputStream(fp).readAllBytes()));
-        uc = [{ type: ''image'', source: { type: ''base64'', media_type: mime, data: b64 } }, { type: ''text'', text: String(prompt) }];
+        uc = [{ type: ''image'', source: { type: ''file'', file_id: String(uploadFileId) } }, { type: ''text'', text: String(prompt) }];
       }
     }
     var body = { model: String(model), max_tokens: 1024, messages: [{ role: ''user'', content: uc }] };

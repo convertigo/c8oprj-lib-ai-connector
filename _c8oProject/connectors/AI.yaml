@@ -33,6 +33,30 @@ trustAllServerCertificates: false
     visibility: 15
 ↓Default_transaction [transactions.HttpTransaction]: 
   ↑default: true
+↓Responses [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/responses: OpenAI Responses API (recommended multimodal endpoint). Accepts input_image.file_id (vision files) and input_file.file_id (PDF files) uploaded through the Files API, so images and PDFs travel as binary uploads instead of base64. The sequence passes the JSON body through __body.'
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  subDir: responses
+  ↓__body [variables.RequestableHttpVariable-1791816978985]: 
+    httpMethod: POST
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791816978988]: 
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
 ↓UploadFile [transactions.JsonHttpTransaction]: 
   comment: 'POST /v1/files: OpenAI Files API upload (multipart). The connector streams the file as a binary part (variable file, Do File Upload Mode = multipartFormData). JsonHttpTransaction parses the response so the sequence can extract the id (file_id).'
   httpVerb: POST

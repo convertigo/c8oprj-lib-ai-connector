@@ -1,0 +1,210 @@
+accessibility: Private
+comment: |
+  'Chat completion through the OpenAI Responses API (/v1/responses).
+  
+  Variables: prompt (required), model (default gpt-4o-mini), system, temperature, max_tokens, api_key (empty = lib_AIConnector.openai_apikey.secret symbol), file, file_type.
+  
+  Files are uploaded in binary through the OpenAI Files API (multipart, no base64 in memory): images use purpose=vision and input_image.file_id, PDFs use purpose=user_data and input_file.file_id. Returns the provider response document (output[0].content[0].text holds the answer; AIChat extracts it).'
+↓Build_Auth [steps.ElementStep-1791816987290]: 
+  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.openai_apikey.secret symbol) as a hidden element used by Call_UploadFile and Call_Responses.
+  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.openai_apikey.secret=}'').trim())'
+  nodeName: Auth
+  output: false
+↓Build_FilePath [steps.ElementStep-1791816987306]: 
+  comment: Resolves the uploaded file path (relative paths in test cases are resolved against the Convertigo projects directory) as a hidden element used as the Call_UploadFile file variable source.
+  expression: |
+    'var fp = String(file || '''').trim();
+    if (fp != '''') {
+      var f = new java.io.File(fp);
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + fp);
+        var c2 = new java.io.File(pd + ''/'' + fp);
+        fp = c1.exists() ? String(c1.getAbsolutePath()) : (c2.exists() ? String(c2.getAbsolutePath()) : fp);
+      }
+    }
+    fp'
+  nodeName: FilePath
+  output: false
+↓Build_Purpose [steps.ElementStep-1791817024317]: 
+  comment: 'Computes the OpenAI Files API purpose from the file type: vision for images, user_data for PDFs. Hidden element used as the Call_UploadFile purpose source.'
+  expression: |
+    'var fp = String(file || '''').trim();
+    var mime = String(file_type || '''').trim();
+    if (mime == '''' && fp != '''') {
+      var ext = fp.toLowerCase().replace(/.*\./, '''');
+      mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+    }
+    mime == ''application/pdf'' ? ''user_data'' : ''vision'''
+  nodeName: Purpose
+  output: false
+↓If_File [steps.IfStep-1791816987325]: 
+  comment: 'Runs the OpenAI Files API binary upload when a file is provided: images use purpose=vision, PDFs use purpose=user_data. The uploaded file_id is then referenced by input_image (images) or input_file (PDFs) in the Responses request (see Build_Body).'
+  condition: String(file || '').trim() != ''
+  ↓Call_UploadFile [steps.TransactionStep-1791816987336]: 
+    comment: 'Calls the AI connector UploadFile transaction: the HTTP connector streams the file as a binary multipart part to the OpenAI Files API (no base64 in memory).'
+    sourceTransaction: lib_AIConnector.AI.UploadFile
+    ↓file [variables.StepVariable-1791817018039]: 
+      comment: Resolved uploaded file path, from Build_FilePath
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791816987306
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓purpose [variables.StepVariable-1791817018046]: 
+      comment: vision for images, user_data for PDFs, from Build_Purpose
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791817024317
+            - java.lang.String: 
+              - ↑value: ./text()
+    ↓__header_Authorization [variables.StepVariable-1791817018048]: 
+      comment: Bearer API key header, from Build_Auth
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1791816987290
+            - java.lang.String: 
+              - ↑value: ./text()
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+  ↓Get_FileId [steps.SimpleSourceStep-1791816987348]: 
+    comment: Extracts the OpenAI file_id from the UploadFile transaction response, exposed as the uploadFileId JS variable used by Build_Body (same name as the Call_FileUrl pattern in other sequences).
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791816987336
+          - java.lang.String: 
+            - ↑value: ./document/object/id/text()
+    variableName: uploadFileId
+↓Build_Body [steps.ElementStep-1791816987359]: 
+  comment: 'Builds the Responses API request body from the sequence scope: input messages (input_image with the uploaded file_id for images, input_file for PDFs, plain text otherwise), model, temperature, max_output_tokens. Runs after Call_UploadFile so uploadFileId is available.'
+  expression: |
+    'var inp = [];
+    if (String(system || '''') != '''') { inp.push({ role: ''system'', content: String(system) }); }
+    var fp = String(file || '''').trim();
+    var uc;
+    if (fp == '''') {
+      uc = String(prompt);
+    } else {
+      var mime = String(file_type || '''').trim();
+      if (mime == '''') {
+        var ext = fp.toLowerCase().replace(/.*\./, '''');
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+      }
+      if (mime == ''application/pdf'') {
+        uc = [{ type: ''input_file'', file_id: String(uploadFileId) }, { type: ''input_text'', text: String(prompt) }];
+      } else {
+        uc = [{ type: ''input_image'', file_id: String(uploadFileId) }, { type: ''input_text'', text: String(prompt) }];
+      }
+    }
+    inp.push({ role: ''user'', content: uc });
+    var b = { model: String(model || ''gpt-4o-mini''), input: inp };
+    var t = Number(temperature);
+    if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) { b.max_output_tokens = mt; }
+    JSON.stringify(b)'
+  nodeName: Body
+  output: false
+↓Call_Responses [steps.TransactionStep-1791816987369]: 
+  comment: Calls the AI connector Responses transaction (POST /v1/responses). The response document holds output[0].content[0].text.
+  sourceTransaction: lib_AIConnector.AI.Responses
+  ↓__body [variables.StepVariable-1791817018068]: 
+    comment: Responses API request JSON, from Build_Body
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791816987359
+          - java.lang.String: 
+            - ↑value: ./text()
+  ↓__header_Authorization [variables.StepVariable-1791817018070]: 
+    comment: Bearer API key header, from Build_Auth
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791816987290
+          - java.lang.String: 
+            - ↑value: ./text()
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓Copy [steps.XMLCopyStep-1791816987383]: 
+  comment: Copies the Responses API response document into the sequence output.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791816987369
+        - java.lang.String: 
+          - ↑value: ./document/*
+↓prompt [variables.RequestableVariable-1791817024333]: 
+  comment: User prompt sent to the model (required).
+↓model [variables.RequestableVariable-1791817024335]: 
+  comment: 'OpenAI model id (default gpt-4o-mini); examples: gpt-4.1, gpt-4o, o4-mini.'
+  value: gpt-4o-mini
+↓system [variables.RequestableVariable-1791817024337]: 
+  comment: Optional system prompt (role / instructions).
+↓temperature [variables.RequestableVariable-1791817024339]: 
+  comment: Sampling temperature (optional, 0-2).
+↓max_tokens [variables.RequestableVariable-1791817024341]: 
+  comment: Maximum number of tokens in the response (optional; sent as max_output_tokens).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓api_key [variables.RequestableVariable-1791817024343]: 
+  comment: OpenAI API key. Empty = lib_AIConnector.openai_apikey.secret symbol (administration console).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓file [variables.RequestableVariable-1791817024345]: 
+  comment: Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+  isFileUpload: true
+↓file_type [variables.RequestableVariable-1791817024347]: 
+  comment: MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
+↓test_image [core.TestCase]: 
+  comment: 'image file (binary Files API upload purpose=vision + input_image.file_id): the model must read the word CIEL in tests/ciel.png.'
+  ↓prompt [variables.TestCaseVariable-1791817036533]: 
+    value: Read the text in this image. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791817036535]: 
+    value: tests/ciel.png
+  ↓file_type [variables.TestCaseVariable-1791817036537]: 
+    value: image/png
+↓test_pdf [core.TestCase]: 
+  comment: 'PDF file (binary Files API upload purpose=user_data + input_file.file_id): the model must read the word CIEL in tests/ciel.pdf.'
+  ↓prompt [variables.TestCaseVariable-1791817036542]: 
+    value: Read the text in this document. Answer with the word only.
+  ↓file [variables.TestCaseVariable-1791817036545]: 
+    value: tests/ciel.pdf
+  ↓file_type [variables.TestCaseVariable-1791817036547]: 
+    value: application/pdf
+↓test_text [core.TestCase]: 
+  comment: 'prompt only (no file): plain text Responses API call, model gpt-4o-mini, default API key.'
+  ↓prompt [variables.TestCaseVariable-1791817032139]: 
+    value: Say OK
+  ↓model [variables.TestCaseVariable-1791817032141]: 
+    value: gpt-4o-mini
