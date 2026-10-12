@@ -1,9 +1,7 @@
 ↑convertigo: 8.4.0.m006
 ↓lib_AIConnector [core.Project]: 
   comment: |
-    '# lib_AIConnector
-    
-    Shared library that serves the modern chat completion APIs of all major AI providers.
+    'Shared library that serves the modern chat completion APIs of all major AI providers.
     
     ## Recommended entry point: AIChat
     
@@ -53,7 +51,7 @@
     
     Set their values in the administration console.'
   corsOrigin: =Origin
-  version: 1.0.1
+  version: 1.0.2
   ↓AI [connectors.HttpConnector]: 🗏 connectors/AI.yaml
   ↓Anthropic [connectors.HttpConnector]: 🗏 connectors/Anthropic.yaml
   ↓c8oforms_response_fs [connectors.FullSyncConnector]: 🗏 connectors/c8oforms_response_fs.yaml
@@ -68,6 +66,7 @@
   ↓GeminiMessage [sequences.GenericSequence]: 🗏 sequences/GeminiMessage.yaml
   ↓HandleBatchPrompts [sequences.GenericSequence]: 🗏 sequences/HandleBatchPrompts.yaml
   ↓MistralMessage [sequences.GenericSequence]: 🗏 sequences/MistralMessage.yaml
+  ↓NR_AIChat [sequences.GenericSequence]: 🗏 sequences/NR_AIChat.yaml
   ↓Project_reference [references.ProjectSchemaReference]: 
     comment: ngx builder template
     projectName: mobilebuilder_tpl_8_1_0_ngx=https://github.com/convertigo/c8oprj-mobilebuilder-tpl/archive/mobilebuilder_tpl_8_1_0_ngx.zip
