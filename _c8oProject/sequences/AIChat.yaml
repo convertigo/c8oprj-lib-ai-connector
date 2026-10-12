@@ -409,6 +409,29 @@ comment: |
               - ↑value: 1791566497933
             - java.lang.String: 
               - ↑value: ./document/object/detail | ./document/object/message
+↓If_unknown [steps.IfStep-1791818695964]: 
+  comment: 'Unknown provider: builds an explicit error object in the output so the client sees the failure reason instead of an empty document.'
+  condition: var p = String(provider || 'openai').toLowerCase().trim(); (['openai','anthropic','gemini','mistral'].indexOf(p) == -1)
+  ↓Unknown_provider_error [steps.XMLErrorStep-1791818727296]: 
+    code: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: 400
+    comment: 'Applicative error structure (Convertigo standard): code 400, message with the received value and the supported list.'
+    details: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: 'Supported providers: openai, anthropic, gemini, mistral.'
+    message: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: JS
+          - →→: '"Unknown provider ''" + String(provider || ''openai'') + "''. Supported providers: openai, anthropic, gemini, mistral."'
 ↓provider [variables.RequestableVariable-1791566488788]: 
   comment: 'Target provider: openai | anthropic | gemini | mistral. Default openai.'
   value: openai
