@@ -5,32 +5,51 @@ comment: |
   
   Returns the provider response document (choices[0].message.content holds the answer).'
 ↓prepare [steps.SimpleStep-1791566386616]: 
-  comment: 'Builds the Mistral chat/completions request: messages (system + user), Bearer Authorization header, model (default mistral-large-latest).'
+  comment: 'Builds the Mistral chat/completions request: messages (system + multimodal user content), Bearer Authorization header, model (default mistral-large-latest). Images are inlined as base64 data URLs (PDF is not supported inline by Mistral chat completions).'
   expression: |
     '// Builds the Mistral /v1/chat/completions request.
-    // Variables: prompt (required), model, system, temperature, max_tokens, api_key.
-    // Scope capture: assign through a parenthesized statement with a bare variable on the right-hand side.
-    var key = String(api_key || "").trim();
+    // Variables: prompt (required), model, system, temperature, max_tokens, api_key, file (optional), file_type (optional).
+    var key = String(api_key || '''').trim();
     var auth;
-    if (key == "") {
-      // Default key: lib_AIConnector.mistral_apikey.secret symbol (administration console).
+    if (key == '''') {
       auth = ''Bearer ${lib_AIConnector.mistral_apikey.secret=}'';
     } else {
       auth = ''Bearer '' + key;
     }
     (__header_Authorization = auth) == '''';
     var messages = [];
-    if (String(system || "") != "") {
-      messages.push({ role: "system", content: String(system) });
+    if (String(system || '''') != '''') {
+      messages.push({ role: ''system'', content: String(system) });
     }
-    messages.push({ role: "user", content: String(prompt) });
-    var modelId = String(model || "");
-    if (modelId == "") { modelId = "mistral-large-latest"; }
+    var uc;
+    var fp = String(file || '''').trim();
+    if (fp == '''') {
+      uc = String(prompt);
+    } else {
+      var fis = new java.io.FileInputStream(fp);
+      var bos = new java.io.ByteArrayOutputStream();
+      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var n;
+      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
+      fis.close();
+      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
+      var mime = String(file_type || '''').trim();
+      if (mime == '''') {
+        var ext = fp.toLowerCase().replace(/.*\./, '''');
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ''image/png'';
+      }
+      uc = [];
+      uc.push({ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } });
+      uc.push({ type: ''text'', text: String(prompt) });
+    }
+    messages.push({ role: ''user'', content: uc });
+    var modelId = String(model || '''');
+    if (modelId == '''') { modelId = ''mistral-large-latest''; }
     var body = { model: modelId, messages: messages };
     var t = Number(temperature);
-    if (String(temperature || "") != "" && !isNaN(t)) { body.temperature = t; }
+    if (String(temperature || '''') != '''' && !isNaN(t)) { body.temperature = t; }
     var mt = Number(max_tokens);
-    if (String(max_tokens || "") != "" && !isNaN(mt)) { body.max_tokens = mt; }
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) { body.max_tokens = mt; }
     __body = JSON.stringify(body);'
 ↓Build_Auth [steps.ElementStep-1791797058092]: 
   comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.mistral_apikey.secret symbol) as a hidden element used as source by Call_ChatCompletions.
@@ -85,3 +104,8 @@ comment: |
     - ↑traceable: false
     - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: 15
+↓file [variables.RequestableVariable-1791802547542]: 
+  comment: Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+  isFileUpload: true
+↓file_type [variables.RequestableVariable-1791802547548]: 
+  comment: MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.

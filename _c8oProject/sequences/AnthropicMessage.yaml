@@ -5,24 +5,48 @@ comment: |
   
   Returns the provider response document (content[0].text holds the answer).'
 ↓prepare [steps.SimpleStep-1791565379244]: 
-  comment: 'Builds the Anthropic Messages request: system + user prompt, max_tokens, and the x-api-key / anthropic-version headers.'
+  comment: 'Builds the Anthropic Messages request: system + multimodal user content (image/document base64 + text), max_tokens, and the x-api-key / anthropic-version headers.'
   expression: |
     '// Builds the Anthropic /v1/messages request.
-    // Variables: prompt (required), model, system, temperature, max_tokens, api_key.
-    var key = String(api_key || "").trim();
-    if (key == "") {
-      // Default key: lib_AIConnector.anthropic_apikey.secret symbol (administration console)
+    // Variables: prompt (required), model, system, temperature, max_tokens, api_key, file (optional), file_type (optional).
+    var key = String(api_key || '''').trim();
+    if (key == '''') {
       (__header_x_api_key = ''${lib_AIConnector.anthropic_apikey.secret=}'') == '''';
     } else {
       (__header_x_api_key = key) == '''';
     }
     (__header_anthropic_version = ''2023-06-01'') == '''';
-    var body = { model: String(model), max_tokens: 1024, messages: [{ role: "user", content: String(prompt) }] };
-    if (String(system || "") != "") { body.system = String(system); }
+    var uc;
+    var fp = String(file || '''').trim();
+    if (fp == '''') {
+      uc = String(prompt);
+    } else {
+      var fis = new java.io.FileInputStream(fp);
+      var bos = new java.io.ByteArrayOutputStream();
+      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var n;
+      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
+      fis.close();
+      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
+      var mime = String(file_type || '''').trim();
+      if (mime == '''') {
+        var ext = fp.toLowerCase().replace(/.*\./, '''');
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+      }
+      uc = [];
+      if (mime == ''application/pdf'') {
+        uc.push({ type: ''document'', source: { type: ''base64'', media_type: ''application/pdf'', data: b64 } });
+      } else {
+        uc.push({ type: ''image'', source: { type: ''base64'', media_type: mime, data: b64 } });
+      }
+      uc.push({ type: ''text'', text: String(prompt) });
+    }
+    var body = { model: String(model), max_tokens: 1024, messages: [{ role: ''user'', content: uc }] };
+    if (String(system || '''') != '''') { body.system = String(system); }
     var t = Number(temperature);
     if (!isNaN(t)) { body.temperature = t; }
     var mt = Number(max_tokens);
-    if (String(max_tokens || "") != "" && !isNaN(mt)) { body.max_tokens = mt; }
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) { body.max_tokens = mt; }
     __body = JSON.stringify(body);'
 ↓Call_Messages [steps.TransactionStep-1791565384705]: 
   comment: Calls the Anthropic Messages transaction.
@@ -71,3 +95,8 @@ comment: |
     - ↑traceable: false
     - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: 15
+↓file [variables.RequestableVariable-1791802547522]: 
+  comment: Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+  isFileUpload: true
+↓file_type [variables.RequestableVariable-1791802547528]: 
+  comment: MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.

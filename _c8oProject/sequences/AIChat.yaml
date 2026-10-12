@@ -1,9 +1,9 @@
 comment: |
   'Hat (facade) sequence: routes a chat completion request to the right provider connector.
   
-  Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider''s lib_AIConnector symbol), base_url (openai provider only: any OpenAI-compatible endpoint).
+  Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider''s lib_AIConnector symbol), base_url (openai provider only), file (optional multipart upload: image or PDF), file_type (optional MIME type, guessed from the extension when empty).
   
-  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. The answer shape follows the target provider.'
+  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. With a file, the user content becomes multimodal (image or PDF blocks + text); Mistral supports images only (use a vision model such as pixtral-12b-2409 or mistral-medium-latest). The answer shape follows the target provider.'
 ↓If_openai [steps.IfStep-1791566493053]: 
   comment: 'provider openai (default): calls ChatCompletion (any OpenAI-compatible endpoint).'
   condition: String(provider || 'openai').toLowerCase() == 'openai'
@@ -30,6 +30,10 @@ comment: |
         - ↑traceable: false
         - →→: xd8e180806a1c1d83a6255212121ab827
       visibility: 15
+    ↓file [variables.StepVariable-1791802567660]: 
+      comment: Uploaded file (image or PDF), from the AIChat sequence scope
+    ↓file_type [variables.StepVariable-1791802567670]: 
+      comment: MIME type of the uploaded file, from the AIChat sequence scope
 ↓If_anthropic [steps.IfStep-1791566493066]: 
   comment: 'provider anthropic: calls AnthropicMessage.'
   condition: String(provider || '').toLowerCase() == 'anthropic'
@@ -54,6 +58,10 @@ comment: |
         - ↑traceable: false
         - →→: xd8e180806a1c1d83a6255212121ab827
       visibility: 15
+    ↓file [variables.StepVariable-1791802567677]: 
+      comment: Uploaded file (image or PDF), from the AIChat sequence scope
+    ↓file_type [variables.StepVariable-1791802567681]: 
+      comment: MIME type of the uploaded file, from the AIChat sequence scope
 ↓If_gemini [steps.IfStep-1791566493079]: 
   comment: 'provider gemini: calls GeminiMessage.'
   condition: String(provider || '').toLowerCase() == 'gemini'
@@ -78,6 +86,10 @@ comment: |
         - ↑traceable: false
         - →→: xd8e180806a1c1d83a6255212121ab827
       visibility: 15
+    ↓file [variables.StepVariable-1791802567688]: 
+      comment: Uploaded file (image or PDF), from the AIChat sequence scope
+    ↓file_type [variables.StepVariable-1791802576340]: 
+      comment: MIME type of the uploaded file, from the AIChat sequence scope
 ↓If_mistral [steps.IfStep-1791566493089]: 
   comment: 'provider mistral: calls MistralMessage.'
   condition: String(provider || '').toLowerCase() == 'mistral'
@@ -102,6 +114,10 @@ comment: |
         - ↑traceable: false
         - →→: xd8e180806a1c1d83a6255212121ab827
       visibility: 15
+    ↓file [variables.StepVariable-1791802576347]: 
+      comment: Uploaded file (image or PDF), from the AIChat sequence scope
+    ↓file_type [variables.StepVariable-1791802576353]: 
+      comment: MIME type of the uploaded file, from the AIChat sequence scope
 ↓provider [variables.RequestableVariable-1791566488788]: 
   comment: 'Target provider: openai | anthropic | gemini | mistral. Default openai.'
   value: openai
@@ -129,6 +145,11 @@ comment: |
   visibility: 15
 ↓base_url [variables.RequestableVariable-1791566488880]: 
   comment: 'openai provider only: base URL of any OpenAI-compatible endpoint. Empty = OpenAI.'
+↓file [variables.RequestableVariable-1791802547491]: 
+  comment: Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+  isFileUpload: true
+↓file_type [variables.RequestableVariable-1791802547505]: 
+  comment: MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 ↓test_anthropic [core.TestCase]: 
   comment: 'provider=anthropic: AnthropicMessage branch, default model claude-sonnet-4-5.'
   ↓provider [variables.TestCaseVariable-1791795848965]: 

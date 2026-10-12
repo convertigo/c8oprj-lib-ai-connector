@@ -7,11 +7,36 @@ comment: |
   
   Returns the provider response document (choices[0].message.content holds the answer).'
 ↓Build_Body [steps.ElementStep-1791797025703]: 
-  comment: Builds the chat/completions JSON body (model, messages, temperature, max_tokens) as a hidden element used as source by Call_Transaction.
+  comment: Builds the chat/completions JSON body (model, messages, temperature, max_tokens, multimodal file blocks) as a hidden element used as source by Call_Transaction.
   expression: |
     'var m = [];
     if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
-    m.push({ role: ''user'', content: String(prompt) });
+    var uc;
+    var fp = String(file || '''').trim();
+    if (fp == '''') {
+      uc = String(prompt);
+    } else {
+      var fis = new java.io.FileInputStream(fp);
+      var bos = new java.io.ByteArrayOutputStream();
+      var buf = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 8192);
+      var n;
+      while ((n = fis.read(buf)) != -1) { bos.write(buf, 0, n); }
+      fis.close();
+      var b64 = String(java.util.Base64.getEncoder().encodeToString(bos.toByteArray()));
+      var mime = String(file_type || '''').trim();
+      if (mime == '''') {
+        var ext = fp.toLowerCase().replace(/.*\./, '''');
+        mime = (ext == ''jpg'' || ext == ''jpeg'') ? ''image/jpeg'' : ext == ''gif'' ? ''image/gif'' : ext == ''webp'' ? ''image/webp'' : ext == ''pdf'' ? ''application/pdf'' : ''image/png'';
+      }
+      uc = [];
+      if (mime == ''application/pdf'') {
+        uc.push({ type: ''file'', file: { filename: ''upload.pdf'', file_data: ''data:application/pdf;base64,'' + b64 } });
+      } else {
+        uc.push({ type: ''image_url'', image_url: { url: ''data:'' + mime + '';base64,'' + b64 } });
+      }
+      uc.push({ type: ''text'', text: String(prompt) });
+    }
+    m.push({ role: ''user'', content: uc });
     var b = { model: String(model || ''gpt-4o-mini''), messages: m };
     var t = Number(temperature);
     if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
@@ -105,6 +130,11 @@ comment: |
     - ↑traceable: false
     - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: 15
+↓file [variables.RequestableVariable-1791802547513]: 
+  comment: Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+  isFileUpload: true
+↓file_type [variables.RequestableVariable-1791802547518]: 
+  comment: MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 ↓testOK [core.TestCase]: 
   ↓prompt [variables.TestCaseVariable-1673538286652]: 
     value: Brainstorm some ideas combining VR and fitness
