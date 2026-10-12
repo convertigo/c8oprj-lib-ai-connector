@@ -16,7 +16,9 @@ comment: |
     var t = Number(temperature);
     if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
     var mt = Number(max_tokens);
-    if (String(max_tokens || '''') != '''' && !isNaN(mt)) { b.max_tokens = mt; }
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) {
+      if (/^(gpt-5|o[0-9])/.test(String(model))) { b.max_completion_tokens = mt; } else { b.max_tokens = mt; }
+    }
     JSON.stringify(b)'
   nodeName: Body
   output: false
