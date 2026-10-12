@@ -17,24 +17,42 @@ Shared library that serves the modern chat completion APIs of all major AI provi
 | `max_tokens` | Optional maximum number of tokens in the response |
 | `api_key` | Provider API key. Empty = the provider's lib_AIConnector symbol |
 | `base_url` | `openai` provider only: base URL of any OpenAI-compatible endpoint |
+| `file` | Optional uploaded file (image or PDF), multipart upload. Receives the temp file path when the request is multipart |
+| `file_type` | Optional MIME type of the uploaded file (image/png, application/pdf...). Guessed from the file extension when empty |
 
 Dispatch:
 
-- `openai` -> `ChatCompletion`
+- `openai` without file -> `ChatCompletion` (any OpenAI-compatible endpoint through `base_url`)
+- `openai` with file -> `OpenAIResponses` (Responses API + Files API, automatic routing)
 - `anthropic` -> `AnthropicMessage`
 - `gemini` -> `GeminiMessage`
 - `mistral` -> `MistralMessage`
+- unknown provider -> explicit applicative error (code 400, "Unknown provider 'X'. Supported providers: openai, anthropic, gemini, mistral.")
 
-The sub-sequence response is copied into the AIChat output; the answer shape follows the target provider.
+On success the AIChat output contains the model answer only (per provider shape: `content`, `text`...). On provider error the provider error object is copied to the output so the client sees the failure reason.
 
 Example: `AIChat?provider=anthropic&model=claude-sonnet-4-5&prompt=Hello`.
 
+Example with a file (multipart): curl -F provider=anthropic -F prompt="Read this document" -F file=@nda.pdf -F file_type=application/pdf <convertigo>/projects/lib_AIConnector/.json?__sequence=AIChat
+
+## File uploads (images and PDFs) - binary pipelines, no base64
+
+Every provider uploads files in binary through the Convertigo HTTP connector transactions (multipartFormData streaming); no base64 encoding is used anywhere in the library.
+
+| Provider | Pipeline | Reference in the chat request |
+|---|---|---|
+| `openai` | `AI.UploadFile` (Files API, purpose vision for images / user_data for PDFs) -> `file_id` | `input_image` / `input_file` with `file_id` (Responses API) |
+| `anthropic` | `Anthropic.UploadFile` (Files API) -> `file_id` | `file` source blocks (images and documents) |
+| `gemini` | `Gemini.UploadStart` + `Gemini.UploadFile` (resumable upload, 3 calls with GenerateContent) | file URI in the message |
+| `mistral` | `Mistral.UploadFile` -> `Mistral.FileUrl` (signed URL); PDFs add `Mistral.Ocr` (mistral-ocr-latest) | images: signed URL as `image_url`; PDFs: extracted markdown in the prompt |
+
 ## Provider sequences
 
-- `ChatCompletion` - OpenAI-compatible chat completions. Default model `gpt-4o-mini`. Variables: prompt, model, system, temperature, max_tokens, base_url, api_key. `base_url` overrides the endpoint (any OpenAI-compatible API).
-- `AnthropicMessage` - Anthropic native Messages API. Default model `claude-sonnet-4-5`. Variables: prompt, model, system, temperature, max_tokens, api_key.
-- `GeminiMessage` - Google Gemini through its OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`). Default model `gemini-2.5-flash`. Variables: prompt, model, system, temperature, max_tokens, api_key.
-- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key.
+- `ChatCompletion` - OpenAI-compatible chat completions. Default model `gpt-4o-mini`. Variables: prompt, model, system, temperature, max_tokens, base_url, api_key, file, file_type. `base_url` overrides the endpoint (any OpenAI-compatible API). PDF files are uploaded (Files API) and referenced by `file_id`; image files are rejected here: use AIChat, which routes images to `OpenAIResponses`.
+- `OpenAIResponses` - OpenAI Responses API (`/v1/responses`) used when a file is attached (image or PDF): binary Files API upload then `input_image`/`input_file` with `file_id`. Default model `gpt-4o-mini`.
+- `AnthropicMessage` - Anthropic native Messages API. Default model `claude-sonnet-4-5`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files (PDF and images) go through the Anthropic Files API and are referenced by `file_id`.
+- `GeminiMessage` - Google Gemini through its OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`). Default model `gemini-2.5-flash`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files use the Gemini resumable Files API upload.
+- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Images: binary Files API upload + signed URL (vision models such as pixtral-12b); PDFs: OCR-extracted markdown (mistral-ocr-latest).
 
 Each sequence copies the provider response into its output via an XMLCopyStep.
 
@@ -51,24 +69,25 @@ API keys are never stored in the project. Each provider reads its key from a sym
 
 Set their values in the administration console.
 
+
 <details><summary><span style="color:DarkGoldenRod"><i>References</i></span></summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/references/images/ProjectSchemaReference_16x16.png?raw=true "ProjectSchemaReference") lib_AIConnector
 
 
-see [readme](/Users/opic/runtime-New84/lib_AIConnector//tree/master#readme)
+see [readme](https://github.com/convertigo/c8oprj-lib-ai-connector/tree/master#readme)
 </p></blockquote></details>
 
 <details><summary><span style="color:DarkGoldenRod"><i>Connectors</i></span></summary><blockquote><p>
 
 
-<details><summary><b>AI</b></summary><blockquote><p>
+<details><summary><b>AI</b> : OpenAI-compatible HTTP connector</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/connectors/images/httpconnector_color_16x16.png?raw=true "HttpConnector") AI
 
-
+OpenAI-compatible HTTP connector. Default origin api.openai.com/v1 (ChatCompletions, UploadFile for the Files API).
 
 <details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
 
@@ -118,6 +137,90 @@ Bearer API key, passed by the ChatCompletion sequence (JS scope)
 
 
 </p></blockquote></details>
+
+<details><summary><b>Responses</b> : POST /v1/responses: OpenAI Responses API (recommended multimodal endpoint)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") Responses
+
+POST /v1/responses: OpenAI Responses API (recommended multimodal endpoint). Accepts input_image.file_id (vision files) and input_file.file_id (PDF files) uploaded through the Files API, so images and PDFs travel as binary uploads instead of base64. The sequence passes the JSON body through __body.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__body
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_Authorization
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>UploadFile</b> : POST /v1/files: OpenAI Files API upload (multipart)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") UploadFile
+
+POST /v1/files: OpenAI Files API upload (multipart). The connector streams the file as a binary part (variable file, Do File Upload Mode = multipartFormData). JsonHttpTransaction parses the response so the sequence can extract the id (file_id).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_Authorization
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;file
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;purpose
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
 </p></blockquote></details>
 </p></blockquote></details>
 
@@ -129,6 +232,9 @@ Bearer API key, passed by the ChatCompletion sequence (JS scope)
 Anthropic native API (api.anthropic.com): Messages endpoint.
 
 <details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
+
+
+<details><summary><b>Messages</b> : POST /v1/messages: Anthropic native Messages API</summary><blockquote><p>
 
 
 ### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") Messages
@@ -172,6 +278,69 @@ Anthropic API key (x-api-key header), from the AnthropicMessage sequence (JS sco
 </tr>
 </table>
 
+</p></blockquote></details>
+
+<details><summary><b>UploadFile</b> : POST /v1/files: Anthropic Files API upload (beta, multipart)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") UploadFile
+
+POST /v1/files: Anthropic Files API upload (beta, multipart). The connector streams the file as a binary part. JsonHttpTransaction parses the response so the sequence can extract the id (file_id).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_anthropic_beta
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_anthropic_version
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_api_key
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;file
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;metadata
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
 </p></blockquote></details>
 </p></blockquote></details>
 
@@ -239,6 +408,9 @@ Google Gemini API (generativelanguage.googleapis.com) through the official OpenA
 <details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
 
 
+<details><summary><b>GenerateContent</b> : POST /v1beta/openai/chat/completions (Gemini OpenAI-compatible endpoint)</summary><blockquote><p>
+
+
 ### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") GenerateContent
 
 POST /v1beta/openai/chat/completions (Gemini OpenAI-compatible endpoint). The sequence passes the model, messages and Bearer key through __body and __header_Authorization.
@@ -273,6 +445,147 @@ Bearer Gemini API key, passed by the GeminiMessage sequence (JS scope)
 </table>
 
 </p></blockquote></details>
+
+<details><summary><b>UploadFile</b> : POST to the upload URL returned by UploadStart: sends the raw binary file as the request body (x-goog-upload-command=upload, finalize)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") UploadFile
+
+POST to the upload URL returned by UploadStart: sends the raw binary file as the request body (x-goog-upload-command=upload, finalize). The sequence passes the file path through __body with Do File Upload Mode = multipartFormData (body mode: file content sent as body), and the MIME type through the reserved __contentType variable. JsonHttpTransaction parses the final file JSON (file.uri) so the sequence can reference the uploaded file.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__body
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__contentType
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_content_type
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_api_key
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_upload_command
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_upload_offset
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__uri
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>UploadStart</b> : POST https://generativelanguage</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") UploadStart
+
+POST https://generativelanguage.googleapis.com/upload/v1beta/files: resumable upload session start (x-goog-upload-protocol=resumable, x-goog-upload-command=start, x-goog-upload-content-type from the sequence scope). The response x-goog-upload-url header (httpInfo) gives the upload target URL.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_api_key
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_upload_command
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_upload_content_type
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_x_goog_upload_protocol
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__uri
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+</p></blockquote></details>
 </p></blockquote></details>
 
 <details><summary><b>Mistral</b> : Mistral AI API (api</summary><blockquote><p>
@@ -283,6 +596,9 @@ Bearer Gemini API key, passed by the GeminiMessage sequence (JS scope)
 Mistral AI API (api.mistral.ai), OpenAI-compatible /v1/chat/completions endpoint.
 
 <details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
+
+
+<details><summary><b>ChatCompletions</b> : POST /v1/chat/completions (Mistral OpenAI-compatible endpoint)</summary><blockquote><p>
 
 
 ### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") ChatCompletions
@@ -319,6 +635,129 @@ Bearer Mistral API key, passed by the MistralMessage sequence (JS scope)
 </table>
 
 </p></blockquote></details>
+
+<details><summary><b>FileUrl</b> : GET /v1/files/{file_id}/url: returns the signed URL of an uploaded Mistral file (used before OCR)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") FileUrl
+
+GET /v1/files/{file_id}/url: returns the signed URL of an uploaded Mistral file (used before OCR).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_Authorization
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;file_id
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>Ocr</b> : POST /v1/ocr: Mistral OCR extraction (model mistral-ocr-latest, document pointing to the signed file URL)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") Ocr
+
+POST /v1/ocr: Mistral OCR extraction (model mistral-ocr-latest, document pointing to the signed file URL). Body passed through __body.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__body
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_Authorization
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>UploadFile</b> : POST /v1/files: Mistral Files API upload (purpose=ocr, multipart)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/jsonhttptransaction_color_16x16.png?raw=true "JsonHttpTransaction") UploadFile
+
+POST /v1/files: Mistral Files API upload (purpose=ocr, multipart). The connector streams the file as a binary part. JsonHttpTransaction parses the response so the sequence can extract the id.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__header_Authorization
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;file
+</td>
+<td>
+
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;purpose
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+</p></blockquote></details>
 </p></blockquote></details>
 
 <details><summary><b>void</b> : void connector, replace or don't use it</summary><blockquote><p>
@@ -348,9 +787,17 @@ does nothing
 
 Hat (facade) sequence: routes a chat completion request to the right provider connector.
 
-Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider's lib_AIConnector symbol), base_url (openai provider only: any OpenAI-compatible endpoint).
+Variables: provider (openai|anthropic|gemini|mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key, base_url (openai only), file (optional image or PDF, multipart upload), file_type.
 
-Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. The answer shape follows the target provider.
+Dispatch: openai without file -> ChatCompletion (any OpenAI-compatible endpoint); openai with file -> OpenAIResponses (Responses API, automatic routing); anthropic -> AnthropicMessage; gemini -> GeminiMessage; mistral -> MistralMessage; unknown provider -> explicit applicative error (code 400) built by the If_unknown branch.
+
+Output: the model answer only on success (per provider shape); the provider error object on failure.
+
+Files API architecture: every upload goes through the Convertigo HTTP connector transactions (multipartFormData streaming, no base64 anywhere):
+- openai: AI.UploadFile purpose=vision/user_data -> file_id in input_image/input_file (Responses API)
+- anthropic: Anthropic.UploadFile (files API beta) -> file_id in the chat message (PDF and images)
+- gemini: Gemini.UploadStart + Gemini.UploadFile (resumable upload, x-goog headers) -> file URI in the chat message
+- mistral: Mistral.UploadFile (purpose=ocr) -> Mistral.FileUrl (signed URL) -> image_url for images (vision models such as pixtral-12b); PDFs add Mistral.Ocr (mistral-ocr-latest) and inject the extracted markdown in the prompt
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -377,6 +824,22 @@ Provider API key. Empty = the provider's lib_AIConnector symbol.
 </td>
 <td>
 openai provider only: base URL of any OpenAI-compatible endpoint. Empty = OpenAI.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 </td>
 </tr>
 <tr>
@@ -438,7 +901,9 @@ Optional sampling temperature (0-2, provider dependent).
 
 Chat completion through the Anthropic native Messages API (Claude models).
 
-Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol).
+Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol), file (optional image or PDF), file_type.
+
+Files (PDF and images) go through the Anthropic Files API (binary multipart upload) and are referenced by file_id in the Messages request; no base64.
 
 Returns the provider response document (content[0].text holds the answer).
 
@@ -459,6 +924,22 @@ comment
 </td>
 <td>
 Anthropic API key. Empty = the default key from the lib_AIConnector.anthropic_apikey.secret symbol (administration console).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 </td>
 </tr>
 <tr>
@@ -543,6 +1024,22 @@ Provider API key. Empty = the default key from the lib_AIConnector.openai_apikey
 </td>
 <td>
 Base URL of any OpenAI-compatible provider (Mistral, Groq, OpenRouter, Together, DeepSeek, xAI, Perplexity, Ollama...). Empty = OpenAI. The sequence appends /chat/completions when missing.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 </td>
 </tr>
 <tr>
@@ -707,6 +1204,22 @@ Google AI API key. Empty = lib_AIConnector.gemini_apikey.secret symbol (administ
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;max_tokens
 </td>
 <td>
@@ -794,9 +1307,9 @@ comment
 
 Chat completion through the Mistral AI API (api.mistral.ai, OpenAI-compatible /v1/chat/completions).
 
-Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol).
+Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol), file, file_type.
 
-Returns the provider response document (choices[0].message.content holds the answer).
+Files are uploaded in binary through the Mistral Files API (multipart, no base64 in memory): images use the signed URL as image_url (vision models), PDFs are OCR-extracted first (mistral-ocr-latest). Returns the provider response document (choices[0].message.content holds the answer).
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -815,6 +1328,22 @@ comment
 </td>
 <td>
 Mistral API key. Empty = lib_AIConnector.mistral_apikey.secret symbol (administration console).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
 </td>
 </tr>
 <tr>
@@ -867,6 +1396,96 @@ Sampling temperature (optional, 0-2).
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") NR_AIChat
 
 Non-regression suite for AIChat: runs the validated test matrix (provider routing, system prompt, temperature, max_tokens truncation, model override) and reports PASS/FAIL per check. Gemini is excluded (prepaid credits depleted, HTTP 402).
+</p></blockquote></details>
+
+<details><summary><b>OpenAIResponses</b> : Chat completion through the OpenAI Responses API (/v1/responses)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") OpenAIResponses
+
+Chat completion through the OpenAI Responses API (/v1/responses).
+
+Variables: prompt (required), model (default gpt-4o-mini), system, temperature, max_tokens, api_key (empty = lib_AIConnector.openai_apikey.secret symbol), file, file_type.
+
+Files are uploaded in binary through the OpenAI Files API (multipart, no base64 in memory): images use purpose=vision and input_image.file_id, PDFs use purpose=user_data and input_file.file_id. Returns the provider response document (output[0].content[0].text holds the answer; AIChat extracts it).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;api_key
+</td>
+<td>
+OpenAI API key. Empty = lib_AIConnector.openai_apikey.secret symbol (administration console).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file
+</td>
+<td>
+Optional uploaded file (image or PDF) sent to the model. Receives the temp file path when multipart upload is used.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;file_type
+</td>
+<td>
+MIME type of the uploaded file (image/png, image/jpeg, application/pdf...). Optional; guessed from the file extension when empty.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;max_tokens
+</td>
+<td>
+Maximum number of tokens in the response (optional; sent as max_output_tokens).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;model
+</td>
+<td>
+OpenAI model id (default gpt-4o-mini); examples: gpt-4.1, gpt-4o, o4-mini.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;prompt
+</td>
+<td>
+User prompt sent to the model (required).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;system
+</td>
+<td>
+Optional system prompt (role / instructions).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;temperature
+</td>
+<td>
+Sampling temperature (optional, 0-2).
+</td>
+</tr>
+</table>
+
 </p></blockquote></details>
 </p></blockquote></details>
 
