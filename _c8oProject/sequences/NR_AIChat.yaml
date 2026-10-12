@@ -1,0 +1,303 @@
+comment: 'Non-regression suite for AIChat: runs the validated test matrix (provider routing, system prompt, temperature, max_tokens truncation, model override) and reports PASS/FAIL per check. Gemini is excluded (prepaid credits depleted, HTTP 402).'
+↓init [steps.SimpleStep-1791799915670]: 
+  expression: |
+    'var results = [];
+    function __nr_check(name, ok, detail) {
+      results.push({name: name, status: ok ? ''PASS'' : ''FAIL'', detail: String(detail)});
+    }'
+↓Call_openai_basic [steps.SequenceStep-1791799915672]: 
+  comment: 'Test 1: openai default branch, system prompt + temperature 0.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓prompt [variables.StepVariable-1791799915674]: 
+    value: Give me the French word for sky
+  ↓system [variables.StepVariable-1791799915676]: 
+    value: Answer with a single French word, nothing else.
+  ↓temperature [variables.StepVariable-1791799915678]: 
+    value: 0
+  ↓max_tokens [variables.StepVariable-1791799915680]: 
+    value: 20
+↓get_openai_content [steps.SimpleSourceStep-1791799930369]: 
+  comment: Extracts the answer text from Call_openai_basic response.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791799915672
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+  variableName: openai_content
+↓check_openai_basic [steps.SimpleStep-1791799930374]: 
+  comment: Asserts openai default branch answers a single French word.
+  expression: '__nr_check(''openai_basic: system+temp0'', openai_content != null && String(openai_content).toLowerCase().indexOf(''ciel'') == 0, openai_content)'
+↓Call_openai_trunc [steps.SequenceStep-1791799930378]: 
+  comment: 'Test 2: max_tokens=5 must truncate with finish_reason length.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓prompt [variables.StepVariable-1791799930380]: 
+    value: Explain photosynthesis in great detail
+  ↓max_tokens [variables.StepVariable-1791799930382]: 
+    value: 5
+↓get_openai_trunc [steps.SimpleSourceStep-1791799943037]: 
+  comment: Extracts finish_reason and completion tokens from Call_openai_trunc.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791799930378
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/choices/object/finish_reason/text()
+  variableName: openai_trunc_reason
+↓check_openai_trunc [steps.SimpleStep-1791799943051]: 
+  comment: Asserts max_tokens=5 truncates (finish_reason length).
+  expression: '__nr_check(''openai_max_tokens: truncation'', openai_trunc_reason == ''length'', openai_trunc_reason)'
+↓Call_openai_model [steps.SequenceStep-1791799943057]: 
+  comment: 'Test 3: model override gpt-4.1-mini.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓prompt [variables.StepVariable-1791799943059]: 
+    value: Say OK
+  ↓model [variables.StepVariable-1791799943061]: 
+    value: gpt-4.1-mini
+  ↓max_tokens [variables.StepVariable-1791799943063]: 
+    value: 10
+↓get_openai_model [steps.SimpleSourceStep-1791799943065]: 
+  comment: Extracts the responding model id from Call_openai_model.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791799943057
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/model/text()
+  variableName: openai_model_id
+↓check_openai_model [steps.SimpleStep-1791799943067]: 
+  comment: Asserts model override is honored.
+  expression: '__nr_check(''openai_model_override: gpt-4.1-mini'', openai_model_id != null && String(openai_model_id).indexOf(''gpt-4.1-mini'') == 0, openai_model_id)'
+↓Call_mistral [steps.SequenceStep-1791799943074]: 
+  comment: 'Test 4: mistral branch, model+system+temp+max_tokens.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓provider [variables.StepVariable-1791799943076]: 
+    value: mistral
+  ↓prompt [variables.StepVariable-1791799943078]: 
+    value: Give me the French word for sky
+  ↓model [variables.StepVariable-1791799943080]: 
+    value: mistral-small-latest
+  ↓system [variables.StepVariable-1791799943082]: 
+    value: Answer with a single French word, nothing else.
+  ↓temperature [variables.StepVariable-1791799943084]: 
+    value: 0
+  ↓max_tokens [variables.StepVariable-1791799943086]: 
+    value: 20
+↓get_mistral_content [steps.SimpleSourceStep-1791799943094]: 
+  comment: Extracts the Mistral answer text.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791799943074
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+  variableName: mistral_content
+↓check_mistral [steps.SimpleStep-1791799943101]: 
+  comment: Asserts mistral branch answers a single French word.
+  expression: '__nr_check(''mistral: model+system+temp0'', mistral_content != null && String(mistral_content).toLowerCase().indexOf(''ciel'') == 0, mistral_content)'
+↓Call_anthropic [steps.SequenceStep-1791799943107]: 
+  comment: 'Test 5: anthropic branch, model+system+temp+max_tokens.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓provider [variables.StepVariable-1791799943109]: 
+    value: anthropic
+  ↓prompt [variables.StepVariable-1791799943111]: 
+    value: Give me the French word for sky
+  ↓model [variables.StepVariable-1791799943113]: 
+    value: claude-haiku-4-5
+  ↓system [variables.StepVariable-1791799943115]: 
+    value: Answer with a single French word, nothing else.
+  ↓temperature [variables.StepVariable-1791799943117]: 
+    value: 0
+  ↓max_tokens [variables.StepVariable-1791799943119]: 
+    value: 20
+↓get_anthropic_content [steps.SimpleSourceStep-1791799943121]: 
+  comment: Extracts the Anthropic answer text.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791799943107
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/content/object/text/text()
+  variableName: anthropic_content
+↓check_anthropic [steps.SimpleStep-1791799943123]: 
+  comment: Asserts anthropic branch answers a single French word.
+  expression: '__nr_check(''anthropic: model+system+temp0'', anthropic_content != null && String(anthropic_content).toLowerCase().indexOf(''ciel'') == 0, anthropic_content)'
+↓Call_gemini [steps.SequenceStep-1791800645949]: 
+  comment: 'Test 6: gemini branch, model+system+temp+max_tokens.'
+  sourceSequence: lib_AIConnector.AIChat
+  ↓provider [variables.StepVariable-1791800645951]: 
+    value: gemini
+  ↓prompt [variables.StepVariable-1791800645953]: 
+    value: Give me the French word for sky
+  ↓system [variables.StepVariable-1791800645955]: 
+    value: Answer with a single French word, nothing else.
+  ↓temperature [variables.StepVariable-1791800645957]: 
+    value: 0
+  ↓max_tokens [variables.StepVariable-1791800645959]: 
+    value: 200
+↓get_gemini_content [steps.SimpleSourceStep-1791800663064]: 
+  comment: Extracts the Gemini answer text (success case).
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791800645949
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/object/choices/object/message/content/text()
+  variableName: gemini_content
+↓get_gemini_error [steps.SimpleSourceStep-1791800663080]: 
+  comment: Extracts the Gemini error code (billing/quota case).
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791800645949
+        - java.lang.String: 
+          - ↑value: ./document/sequence/document/array/object/error/code/text()
+  variableName: gemini_error_code
+↓check_gemini [steps.SimpleStep-1791800663087]: 
+  comment: PASS if the answer is correct, SKIP on the 402 billing error, FAIL otherwise.
+  expression: '__nr_check(''gemini: model+system+temp0'', gemini_content != null && String(gemini_content).toLowerCase().indexOf(''ciel'') == 0, gemini_content != null ? gemini_content : (gemini_error_code == ''402'' ? ''SKIP: '' + gemini_error_code + '' billing credits depleted'' : ''ERROR: '' + gemini_error_code))'
+↓build_report [steps.SimpleStep-1791800478230]: 
+  comment: Builds the nr_report JS object (counts + checks) consumed by the json_report JSON steps.
+  expression: |
+    'var failed = 0;
+    for (var i = 0; i < results.length; i++) { if (results[i].status != ''PASS'') failed++; }
+    var nr_report = {total: results.length, passed: results.length - failed, failed: failed, status: failed == 0 ? ''PASS'' : ''FAIL''};'
+↓json_report [steps.JsonObjectStep-1791800399572]: 
+  comment: Typed JSON report object emitted as sequence output.
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: json_report
+  ↓total [steps.JsonFieldStep-1791800399574]: 
+    comment: Total checks.
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: total
+    type: number
+    value: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: JS
+          - →→: nr_report.total
+  ↓passed [steps.JsonFieldStep-1791800399576]: 
+    comment: Passed checks.
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: passed
+    type: number
+    value: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: JS
+          - →→: nr_report.passed
+  ↓failed [steps.JsonFieldStep-1791800399578]: 
+    comment: Failed checks.
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: failed
+    type: number
+    value: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: JS
+          - →→: nr_report.failed
+  ↓status [steps.JsonFieldStep-1791800399580]: 
+    comment: Overall status.
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: status
+    value: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: JS
+          - →→: nr_report.status
+  ↓checks [steps.JsonArrayStep-1791800418247]: 
+    comment: Array of check results.
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: checks
+    ↓iterate_checks [steps.SimpleIteratorStep-1791800422215]: 
+      comment: Iterates over the results JS array; item holds the current check.
+      expression: results
+      ↓check [steps.JsonObjectStep-1791800422217]: 
+        comment: One check result object.
+        key: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+            - SmartType: 
+              - ↑mode: PLAIN
+              - →→: check
+        ↓name [steps.JsonFieldStep-1791800428351]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: name
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: JS
+                - →→: item.name
+        ↓status [steps.JsonFieldStep-1791800428358]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: status
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: JS
+                - →→: item.status
+        ↓detail [steps.JsonFieldStep-1791800428364]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: detail
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: JS
+                - →→: item.detail
