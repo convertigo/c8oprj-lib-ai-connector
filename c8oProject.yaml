@@ -70,7 +70,7 @@
     Set their values in the administration console.
     '
   corsOrigin: =Origin
-  version: 1.0.9
+  version: 1.0.10
   ↓AI [connectors.HttpConnector]: 🗏 connectors/AI.yaml
   ↓Anthropic [connectors.HttpConnector]: 🗏 connectors/Anthropic.yaml
   ↓c8oforms_response_fs [connectors.FullSyncConnector]: 🗏 connectors/c8oforms_response_fs.yaml
