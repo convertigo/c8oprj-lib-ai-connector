@@ -1,0 +1,136 @@
+comment: Use this source in a Grid to display ChatGPT reponses to a prompt
+↓Input_variables [steps.InputVariablesStep-1673544592384]: 
+↓jSimpleSource [steps.SimpleSourceStep-1673546902208]: 
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1673544592384
+        - java.lang.String: 
+          - ↑value: ./forms_prompt/text()
+  variableName: Prompt
+↓jIf [steps.IfStep-1673546944986]: 
+  condition: Prompt.indexOf('\n') != -1
+  ↓Call_Sequence [steps.SequenceStep-1673544148921]: 
+    sourceSequence: lib_AIConnector.ChatCompletion
+    ↓prompt [variables.StepVariable-1673544148923]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1673544592384
+            - java.lang.String: 
+              - ↑value: ./forms_prompt/text()
+  ↓Array [steps.JsonArrayStep-1673544156404]: 
+    key: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+        - SmartType: 
+          - ↑mode: PLAIN
+          - →→: data
+    ↓Object [steps.JsonObjectStep-1673544177649]: 
+      key: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+          - SmartType: 
+            - ↑mode: PLAIN
+            - →→: Object
+      ↓Field [steps.JsonFieldStep-1673544193396]: 
+        isEnabled: false
+        key: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+            - SmartType: 
+              - ↑mode: PLAIN
+              - →→: Prompt
+        value: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+            - SmartType: 
+              - ↑mode: SOURCE
+              - com.twinsoft.convertigo.beans.common.XMLVector: 
+                - java.lang.String: 
+                  - ↑value: 1673544592384
+                - java.lang.String: 
+                  - ↑value: ./forms_prompt/text()
+      ↓jSimpleSource [steps.SimpleSourceStep-1673544995776]: 
+        sourceDefinition: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+            - com.twinsoft.convertigo.beans.common.XMLVector: 
+              - java.lang.String: 
+                - ↑value: 1673544148921
+              - java.lang.String: 
+                - ↑value: ./document/object/choices/object/text/text()
+        variableName: Answer
+      ↓Object [steps.JsonObjectStep-1673544902208]: 
+        key: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+            - SmartType: 
+              - ↑mode: PLAIN
+              - →→: Answer
+        ↓Field [steps.JsonFieldStep-1673544919825]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: displayName
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: Answer
+        ↓Field1 [steps.JsonFieldStep-1673544922379]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: displayValue
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: JS
+                - →→: |
+                  '''<div  style="white-space: pre-wrap">'' + Answer + ''</div>''
+                  '
+        ↓Field2 [steps.JsonFieldStep-1673544922805]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: type
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: html
+        ↓Field3 [steps.JsonFieldStep-1673544923769]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: value
+          value: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: JS
+                - →→: Answer
+↓forms_prompt [variables.RequestableVariable-1673544138776]: 
+  comment: The prompt to ask to ChatGPT
+↓TestOK [core.TestCase]: 
+  ↓forms_prompt [variables.TestCaseVariable-1673544626152]: 
+    value: |
+      Brainstorm some ideas combining VR and fitness
+      
+      

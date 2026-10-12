@@ -1,0 +1,34 @@
+baseDir: /v1/
+https: true
+port: 443
+server: api.openai.com
+trustAllServerCertificates: false
+↓ChatCompletions [transactions.JsonHttpTransaction]: 
+  allowedUriOverride: absolute
+  comment: POST to any OpenAI-compatible /v1/chat/completions endpoint. The sequence passes the full URL through __uri (prepare step), so the connector origin (api.openai.com) is only the default.
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: chat/completions
+  ↓__body [variables.RequestableHttpVariable-1673537583451]: 
+    httpMethod: POST
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791562099914]: 
+    comment: Bearer API key, passed by the ChatCompletion sequence (JS scope)
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓Default_transaction [transactions.HttpTransaction]: 
+  ↑default: true

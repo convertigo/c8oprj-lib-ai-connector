@@ -1,0 +1,89 @@
+comment: |
+  'Chat completion through the Google Gemini API (official OpenAI-compatible endpoint /v1beta/openai/chat/completions).
+  
+  Variables: prompt (required), model (default gemini-2.5-flash), system, temperature, max_tokens, api_key (empty = lib_AIConnector.gemini_apikey.secret symbol).
+  
+  Returns the provider response document (choices[0].message.content holds the answer).'
+↓prepare [steps.SimpleStep-1791565455624]: 
+  comment: 'Builds the Gemini OpenAI-compatible chat/completions request: messages (system + user), Bearer Authorization header, model (default gemini-2.5-flash).'
+  expression: |
+    '// Builds the Gemini request through the official OpenAI-compatible endpoint
+    // /v1beta/openai/chat/completions (the native generateContent URL contains a colon
+    // that the Convertigo HTTP client cannot send reliably).
+    // Variables: prompt (required), model, system, temperature, max_tokens, api_key.
+    // Scope capture: assign through a parenthesized statement with a bare variable on the right-hand side.
+    var key = String(api_key || "").trim();
+    var auth;
+    if (key == "") {
+      // Default key: lib_AIConnector.gemini_apikey.secret symbol (administration console).
+      auth = ''Bearer ${lib_AIConnector.gemini_apikey.secret=}'';
+    } else {
+      auth = ''Bearer '' + key;
+    }
+    (__header_Authorization = auth) == '''';
+    var messages = [];
+    if (String(system || "") != "") {
+      messages.push({ role: "system", content: String(system) });
+    }
+    messages.push({ role: "user", content: String(prompt) });
+    var modelId = String(model || "");
+    if (modelId == "") { modelId = "gemini-2.5-flash"; }
+    var body = { model: modelId, messages: messages };
+    var t = Number(temperature);
+    if (String(temperature || "") != "" && !isNaN(t)) { body.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || "") != "" && !isNaN(mt)) { body.max_tokens = mt; }
+    __body = JSON.stringify(body);'
+↓Build_Auth [steps.ElementStep-1791797062994]: 
+  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.gemini_apikey.secret symbol) as a hidden element used as source by Call_GenerateContent.
+  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.gemini_apikey.secret=}'').trim())'
+  nodeName: Auth
+  output: false
+↓Call_GenerateContent [steps.TransactionStep-1791565458868]: 
+  comment: Calls the Gemini GenerateContent transaction.
+  sourceTransaction: lib_AIConnector.Gemini.GenerateContent
+  ↓__header_Authorization [variables.StepVariable-1791565462969]: 
+    comment: Bearer Gemini API key header, from the JavaScript scope (prepare)
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791797062994
+          - java.lang.String: 
+            - ↑value: ./text()
+  ↓__body [variables.StepVariable-1791565467820]: 
+    comment: JSON request body (model, messages), from the JavaScript scope (prepare)
+↓Copy [steps.XMLCopyStep-1791565503078]: 
+  comment: Copies the Gemini response document into the sequence output.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791565458868
+        - java.lang.String: 
+          - ↑value: ./document/*
+↓prompt [variables.RequestableVariable-1791565505917]: 
+  comment: User prompt sent to the model (required).
+↓model [variables.RequestableVariable-1791565505919]: 
+  comment: Gemini model id (default gemini-2.5-flash).
+  value: gemini-2.5-flash
+↓system [variables.RequestableVariable-1791565505923]: 
+  comment: Optional system instruction for the model.
+↓temperature [variables.RequestableVariable-1791565505927]: 
+  comment: Sampling temperature (optional, 0-2).
+↓max_tokens [variables.RequestableVariable-1791565505930]: 
+  comment: Maximum number of output tokens (optional).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓api_key [variables.RequestableVariable-1791565505933]: 
+  comment: Google AI API key. Empty = lib_AIConnector.gemini_apikey.secret symbol (administration console).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15

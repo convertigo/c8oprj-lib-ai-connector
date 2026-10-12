@@ -1,0 +1,192 @@
+responseTimeout: 3600
+↓Read_CSV [steps.ReadCSVStep-1673631617276]: 
+  dataFile: '".//csv/prompts-GPT.csv"'
+  titleLine: true
+↓Array [steps.JsonArrayStep-1673855897622]: 
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: responses
+  ↓Iterator [steps.IteratorStep-1673854855440]: 
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1673631617276
+          - java.lang.String: 
+            - ↑value: ./line
+    ↓Parallel [steps.ParallelStep-1674754889332]: 
+      maxNumberOfThreads: 10
+      ↓Serial [steps.SerialStep-1674755001888]: 
+        ↓Concat [steps.XMLConcatStep-1673854882755]: 
+          nodeName: prompt
+          output: false
+          sourcesDefinition: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+              - com.twinsoft.convertigo.beans.common.XMLVector: 
+                - xmlizable: 
+                  - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                    - java.lang.String: 
+                      - ↑value: description
+                    - xmlizable: 
+                      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                      - com.twinsoft.convertigo.beans.common.XMLVector: 
+                        - java.lang.String: 
+                          - ↑value: 1673854855440
+                        - java.lang.String: 
+                          - ↑value: ./prompt/text()
+                    - java.lang.String: 
+                      - ↑value: ''
+        ↓Call_Sequence [steps.SequenceStep-1673855055930]: 
+          sourceSequence: lib_AIConnector.ChatCompletion
+          ↓prompt [variables.StepVariable-1673855055932]: 
+            comment: The prompt to ask to ChatGPT
+            sourceDefinition: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                - com.twinsoft.convertigo.beans.common.XMLVector: 
+                  - java.lang.String: 
+                    - ↑value: 1673854882755
+                  - java.lang.String: 
+                    - ↑value: ./text()
+          ↓model [variables.StepVariable-1673855055934]: 
+            comment: |
+              'The model to be used can be : 
+              text-davinci-003, 
+              text-curie-001, 
+              text-babbage-001, 
+              text-ada-001
+              
+              
+              '
+            sourceDefinition: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                - com.twinsoft.convertigo.beans.common.XMLVector: 
+                  - java.lang.String: 
+                    - ↑value: 1673854855440
+                  - java.lang.String: 
+                    - ↑value: ./model/text()
+            value: text-davinci-003
+          ↓temperature [variables.StepVariable-1673855055936]: 
+            comment: 'Temperature , decimal from 0 to 1 ex: 0.6'
+            sourceDefinition: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                - com.twinsoft.convertigo.beans.common.XMLVector: 
+                  - java.lang.String: 
+                    - ↑value: 1673854855440
+                  - java.lang.String: 
+                    - ↑value: ./temperature/text()
+            value: 0.6
+        ↓Object [steps.JsonObjectStep-1673857473208]: 
+          key: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+              - SmartType: 
+                - ↑mode: PLAIN
+                - →→: line
+          ↓Field [steps.JsonFieldStep-1673856509891]: 
+            key: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: PLAIN
+                  - →→: title
+            value: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: SOURCE
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                    - java.lang.String: 
+                      - ↑value: 1673854855440
+                    - java.lang.String: 
+                      - ↑value: ./titre/text()
+          ↓Field1 [steps.JsonFieldStep-1673856549630]: 
+            key: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: PLAIN
+                  - →→: prompt
+            value: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: SOURCE
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                    - java.lang.String: 
+                      - ↑value: 1673854855440
+                    - java.lang.String: 
+                      - ↑value: ./prompt/text()
+          ↓Field2 [steps.JsonFieldStep-1673856569201]: 
+            key: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: PLAIN
+                  - →→: answer
+            value: 
+              - xmlizable: 
+                - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+                - SmartType: 
+                  - ↑mode: SOURCE
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                    - java.lang.String: 
+                      - ↑value: 1673855055930
+                    - java.lang.String: 
+                      - ↑value: ./document/object/choices/object/text/text()
+↓Write_CSV [steps.WriteCSVStep-1674397762625]: 
+  dataFile: '".//csv/responses.csv"'
+  separator: ','
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1673855897622
+        - java.lang.String: 
+          - ↑value: ./Object
+  titleLine: true
+  writeOutputFalse: false
+↓element [steps.XMLElementStep-1674755061527]: 
+  nodeName: Body
+  nodeText: Vos réponses ChatGPT sont attachées à ce mail sous la forme d'un fichier CSV
+↓SMTP_send [steps.SmtpStep-1674465181250]: 
+  attachments: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: '".//csv/responses.csv"'
+            - java.lang.String: 
+              - ↑value: '"ChatGPTResponses.csv"'
+  smtpAuthType: ${lib.actions.c8oforms.smtp.security}
+  smtpPassword: x731c565d55a2a2e3f9747ad43539421ba369803d925e5f657302a8f9b0af91173177899c6a22f114f50b0b9bb5e982af
+  smtpPort: ${lib.actions.c8oforms.smtp.port}
+  smtpRecipients: toEmail
+  smtpSender: '"${lib.actions.c8oforms.smtp.sender}"'
+  smtpServer: ${lib.actions.c8oforms.smtp.server}
+  smtpSubject: '"Convertigo ChatGPT Batch prompts"'
+  smtpUsername: ${lib.actions.c8oforms.smtp.user}
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1674755061527
+        - java.lang.String: 
+          - ↑value: ./text()
+↓batchFile [variables.RequestableVariable-1673854090649]: 
+  value: .//csv/prompts-GPT.csv
+↓toEmail [variables.RequestableVariable-1674754214600]: 
+  value: To:olivierp@convertigo.com

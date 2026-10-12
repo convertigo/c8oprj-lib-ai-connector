@@ -1,0 +1,21 @@
+<ion-app>
+<ion-menu class="class1500890597895" swipeGesture="true" side="start" disabled="true" menu-id="Menu" content-id="main-content">
+<ion-header class="class1500890727582" translucent="false">
+<ion-toolbar class="class1500890731485">
+<ion-title class="class1500890752959">
+My Menu
+</ion-title>
+</ion-toolbar>
+</ion-header>
+<ion-content class="ion-padding class1500890742326" forceOverscroll="false" scrollEvents="false" scrollY="true" scrollX="false" fullscreen="false">
+<ion-list class="class1501343197007" inset="inset">
+<ion-item  class="class1500890605250" *ngFor="let p of appPages;" [hidden]="!p.includedInAutoMenu" routerDirection="root" [routerLink]="[p.url]" lines="none" detail="false" [class.selected]="selectedPath.startsWith('/' + p.url)">
+<ion-icon [slot]="(p.icon != '' && p.iconPos == '') ? 'start':p.iconPos" [ios]="p.icon + (p.icon == '' ? '':'-outline')" [md]="p.icon + (p.icon == '' ? '':'-sharp')"></ion-icon>
+<ion-label>{{ p.titleKey | translate }}</ion-label>
+</ion-item>
+</ion-list>
+</ion-content>
+</ion-menu>
+
+<ion-router-outlet id="main-content"></ion-router-outlet>
+</ion-app>

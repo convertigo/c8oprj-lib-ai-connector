@@ -1,0 +1,14 @@
+{
+    "name": "lib_AIConnector",
+    "short_name": "lib_AIConnector",
+    "scope": ".\/",
+    "start_url": ".\/",
+    "display": "standalone",
+    "icons": [{
+        "src": "assets\/icon_512x512.png",
+        "sizes": "512x512",
+        "type": "image\/png"
+    }],
+    "background_color": "#01ccfc",
+    "theme_color": "#01ccfc"
+}

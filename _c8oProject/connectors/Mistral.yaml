@@ -1,0 +1,34 @@
+baseDir: /v1/
+comment: Mistral AI API (api.mistral.ai), OpenAI-compatible /v1/chat/completions endpoint.
+https: true
+port: 443
+server: api.mistral.ai
+trustAllServerCertificates: false
+↓ChatCompletions [transactions.JsonHttpTransaction]: 
+  allowedUriOverride: absolute
+  comment: POST /v1/chat/completions (Mistral OpenAI-compatible endpoint). The sequence passes the model and messages through __body and the Bearer key through __header_Authorization.
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: chat/completions
+  ↓__body [variables.RequestableHttpVariable-1791566381896]: 
+    comment: JSON request body (model, messages), passed by the MistralMessage sequence (JS scope)
+    httpMethod: POST
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791566381903]: 
+    comment: Bearer Mistral API key, passed by the MistralMessage sequence (JS scope)
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15

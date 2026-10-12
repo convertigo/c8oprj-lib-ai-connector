@@ -1,0 +1,34 @@
+baseDir: /v1beta/openai/
+comment: Google Gemini API (generativelanguage.googleapis.com) through the official OpenAI-compatible endpoint /v1beta/openai/chat/completions. The native generateContent path contains a colon that the Convertigo HTTP client cannot send reliably, so the OpenAI-compatible endpoint is used instead.
+https: true
+port: 443
+server: generativelanguage.googleapis.com
+trustAllServerCertificates: false
+↓GenerateContent [transactions.JsonHttpTransaction]: 
+  allowedUriOverride: absolute
+  comment: POST /v1beta/openai/chat/completions (Gemini OpenAI-compatible endpoint). The sequence passes the model, messages and Bearer key through __body and __header_Authorization.
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: chat/completions
+  ↓__body [variables.RequestableHttpVariable-1791565446841]: 
+    comment: JSON request body (contents, systemInstruction...), passed by the GeminiMessage sequence (JS scope)
+    httpMethod: POST
+  ↓__header_Authorization [variables.RequestableHttpVariable-1791566258905]: 
+    comment: Bearer Gemini API key, passed by the GeminiMessage sequence (JS scope)
+    httpName: Authorization
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15

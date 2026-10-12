@@ -1,0 +1,12 @@
+anonymousReplication: allow
+comment: Fullsync connector that holds all responses
+databaseName: c8oforms_response_fs
+↓GetDocumentAttachment [transactions.couchdb.GetDocumentAttachmentTransaction]: 
+  ↑default: true
+  accessibility: Public
+  ↓_use_attname [variables.RequestableVariable-1674150478837]: 
+    description: Attachment name
+  ↓_use_docid [variables.RequestableVariable-1674150478840]: 
+    description: Document ID
+  ↓_use_attpath [variables.RequestableVariable-1674150478843]: 
+    description: Attachment path  This path is either absolute or relative to Convertigo environment. Relative paths starting with:<br/><br/>• <span class="computer">./</span> are relative to Convertigo workspace,<br/>• <span class="computer">.//</span> are relative to current project folder. <br/><br/>

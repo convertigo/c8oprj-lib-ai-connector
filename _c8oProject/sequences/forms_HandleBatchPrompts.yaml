@@ -1,0 +1,179 @@
+comment: |
+  'This No Code action will handle ChatGPT prompts in batch mode.
+  
+  The action will use a CSV file uploaded in a No Code Studio (Forms) app and will execute all lines of this CSV file against the API.
+  
+  The file format must have these columns
+  
+  |title|definition_gpt|prompt_prefix|Prompt_suffix|prompt|model|max_tokens|temperature|top_p|frequency_penalty|presence_penalty|
+  |-----|--------------|-------------|-------------|------|-----|----------|-----------|-----|-----------------|----------------|
+  |optional|Optional   |A prefix to the prompt | the prompt itself | a suffix to the prompt | the model to be used | max number for tokens (words) | temperatuer (randomicity..) | optional |  optional | optional | 
+  
+  '
+responseTimeout: 3600
+↓Input_variables [steps.InputVariablesStep-1673620436714]: 
+↓DefineFlatenize [steps.SimpleStep-1673629835289]: 
+  expression: |
+    '//function flatenize
+    var flatenize = function (doc, prefix, resp, myid) {
+        for (var property in doc) {
+            try {
+                if (doc[property].type != undefined) {
+    				if(doc[property].type == "file") {
+    					resp[doc[property]["name"]] = {
+    						att_type: true,
+    						name: doc[property].value
+    					};
+    				}
+                    else {
+    					/* others are supported*/
+    					resp[doc[property]["name"]] = doc[property].value;
+                    }
+                }
+            }
+            catch (e) {
+                log.error("[forms_fill_PDF] an error occurred while computing values: \n" + JSON.stringify(e));
+            }
+        }
+    };
+    
+    
+    function makeid(length) {
+        var result           = '''';
+        var characters       = ''ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'';
+        var charactersLength = characters.length;
+        for ( var i = 0; i < length; i++ ) {
+          result += characters.charAt(Math.floor(Math.random() * 
+     charactersLength));
+       }
+       return result;
+    }
+    var filesToDelete = [];
+    '
+↓ComputeFieldsWIthFlatenize [steps.SimpleStep-1673620848314]: 
+  expression: |
+    '// convert XML to JSON doc
+    var jDoc = JSON.parse('''' + com.twinsoft.convertigo.engine.util.XMLUtils.XmlToJson(doc, true, true));
+    log.warn("flatenize jDoc : " + JSON.stringify(jDoc))
+    var resp = {};
+    flatenize(jDoc.variable.resp, "", resp, jDoc.variable._id);
+    var _use_docid = jDoc.variable._id;
+    log.warn("flatenize done : " + JSON.stringify(resp))
+    '
+↓jIterator [steps.SimpleIteratorStep-1673620423684]: 
+  expression: Object.keys(resp)
+  ↓jIf [steps.IfStep-1673620423687]: 
+    condition: resp[item].att_type === true
+    ↓getAttachmentName [steps.SimpleStep-1673620423690]: 
+      expression: |
+        var _use_attname = resp[item].name;
+        b64Value = "";
+        var fileName = new Date().getTime() + "_" + makeid(20);
+        var dir = context.getProjectDirectory()+"/csv/";
+        var _use_attpath = dir + fileName;
+        log.warn("_use_attpath log" + _use_attpath);
+        filesToDelete.push(_use_attpath)
+      output: true
+    ↓Call_Transaction [steps.TransactionStep-1673620423693]: 
+      output: true
+      sourceTransaction: lib_AIConnector.c8oforms_response_fs.GetDocumentAttachment
+      ↓_use_attname [variables.StepVariable-1673620423696]: 
+        description: Attachment name
+      ↓_use_docid [variables.StepVariable-1673620423699]: 
+        description: Document ID
+      ↓_use_attpath [variables.StepVariable-1673620423702]: 
+        description: Attachment path  This path is either absolute or relative to Convertigo environment. Relative paths starting with:<br/><br/>• <span class="computer">./</span> are relative to Convertigo workspace,<br/>• <span class="computer">.//</span> are relative to current project folder. <br/><br/>
+    ↓jSimpleSource1 [steps.SimpleSourceStep-1673620423705]: 
+      sourceDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: 1673620423693
+            - java.lang.String: 
+              - ↑value: ./document/couchdb_output/_c8oMeta/headers/Content_Type/text()
+      variableName: contentType
+    ↓setContentType [steps.SimpleStep-1673620423708]: 
+      expression: var fileName2 = fileName +"." +contentType.split("/")[1];
+    ↓Rename_file [steps.RenameStep-1673620423711]: 
+      newName: fileName2
+      sourcePath: _use_attpath
+    ↓setB64Value [steps.SimpleStep-1673620423714]: 
+      expression: |
+        'resp[item] = dir + fileName2;
+        log.warn("just before");
+        
+        var f = new java.io.File(dir + fileName2).exists();
+        log.warn("testing file exists : "+ f);
+        var index = filesToDelete.indexOf(_use_attpath);
+        if( index != -1){
+        	filesToDelete[index] =  dir + fileName2;
+        }
+        else{
+        	filesToDelete.push(dir + fileName2);
+        }'
+      output: true
+    ↓jElement [steps.ElementStep-1673854224339]: 
+      expression: dir + fileName2
+      nodeName: csvFilePath
+    ↓ToEmail [steps.XMLConcatStep-1675784559102]: 
+      nodeName: ToEmail
+      separator: 
+      sourcesDefinition: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+              - com.twinsoft.convertigo.beans.common.XMLVector: 
+                - java.lang.String: 
+                  - ↑value: description
+                - xmlizable: 
+                  - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                - java.lang.String: 
+                  - ↑value: To:
+            - xmlizable: 
+              - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+              - com.twinsoft.convertigo.beans.common.XMLVector: 
+                - java.lang.String: 
+                  - ↑value: description
+                - xmlizable: 
+                  - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+                  - com.twinsoft.convertigo.beans.common.XMLVector: 
+                    - java.lang.String: 
+                      - ↑value: 1673620436714
+                    - java.lang.String: 
+                      - ↑value: ./forms_email/text()
+                - java.lang.String: 
+                  - ↑value: ''
+    ↓Call_Sequence [steps.SequenceStep-1673854120452]: 
+      sourceSequence: lib_AIConnector.HandleBatchPrompts
+      ↓batchFile [variables.StepVariable-1673854120454]: 
+        sourceDefinition: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+            - com.twinsoft.convertigo.beans.common.XMLVector: 
+              - java.lang.String: 
+                - ↑value: 1673854224339
+              - java.lang.String: 
+                - ↑value: ./text()
+      ↓toEmail [variables.StepVariable-1675784468504]: 
+        sourceDefinition: 
+          - xmlizable: 
+            - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+            - com.twinsoft.convertigo.beans.common.XMLVector: 
+              - java.lang.String: 
+                - ↑value: 1675784559102
+              - java.lang.String: 
+                - ↑value: ./text()
+    ↓jIterator_1 [steps.SimpleIteratorStep-1673631736653]: 
+      expression: filesToDelete
+      ↓Delete_file [steps.DeleteStep-1673631736656]: 
+        sourcePath: item
+↓doc [variables.RequestableVariable-1673618489041]: 
+  comment: The No Code app response doc
+↓originalDoc [variables.RequestableVariable-1673618496609]: 
+  comment: The No Code app form
+↓forms_email [variables.RequestableVariable-1675784397101]: 
+  comment: The email where ChatGPT responses must be emailed to

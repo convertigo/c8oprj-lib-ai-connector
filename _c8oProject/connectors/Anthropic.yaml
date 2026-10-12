@@ -1,0 +1,37 @@
+baseDir: /v1/
+comment: 'Anthropic native API (api.anthropic.com): Messages endpoint.'
+https: true
+port: 443
+server: api.anthropic.com
+trustAllServerCertificates: false
+↓Messages [transactions.JsonHttpTransaction]: 
+  comment: 'POST /v1/messages: Anthropic native Messages API. The sequence passes model, max_tokens, system and messages through __body, and the x-api-key / anthropic-version headers.'
+  httpParameters: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - xmlizable: 
+          - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+          - com.twinsoft.convertigo.beans.common.XMLVector: 
+            - java.lang.String: 
+              - ↑value: Content-Type
+            - java.lang.String: 
+              - ↑value: application/json
+  httpVerb: POST
+  responseTimeout: 200
+  subDir: messages
+  ↓__body [variables.RequestableHttpVariable-1791565364189]: 
+    comment: JSON request body (model, max_tokens, system, messages), passed by the AnthropicMessage sequence (JS scope)
+    httpMethod: POST
+  ↓__header_x_api_key [variables.RequestableHttpVariable-1791565367312]: 
+    comment: Anthropic API key (x-api-key header), from the AnthropicMessage sequence (JS scope)
+    httpName: x-api-key
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_anthropic_version [variables.RequestableHttpVariable-1791565370471]: 
+    comment: anthropic-version header (2023-06-01), from the AnthropicMessage sequence (JS scope)
+    httpName: anthropic-version
+    value: 2023-06-01

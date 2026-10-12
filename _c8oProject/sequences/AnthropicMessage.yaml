@@ -1,0 +1,73 @@
+comment: |
+  'Chat completion through the Anthropic native Messages API (Claude models).
+  
+  Variables: prompt (required), model (default claude-sonnet-4-5), system, temperature, max_tokens (default 1024), api_key (empty = lib_AIConnector.anthropic_apikey.secret symbol).
+  
+  Returns the provider response document (content[0].text holds the answer).'
+↓prepare [steps.SimpleStep-1791565379244]: 
+  comment: 'Builds the Anthropic Messages request: system + user prompt, max_tokens, and the x-api-key / anthropic-version headers.'
+  expression: |
+    '// Builds the Anthropic /v1/messages request.
+    // Variables: prompt (required), model, system, temperature, max_tokens, api_key.
+    var key = String(api_key || "").trim();
+    if (key == "") {
+      // Default key: lib_AIConnector.anthropic_apikey.secret symbol (administration console)
+      (__header_x_api_key = ''${lib_AIConnector.anthropic_apikey.secret=}'') == '''';
+    } else {
+      (__header_x_api_key = key) == '''';
+    }
+    (__header_anthropic_version = ''2023-06-01'') == '''';
+    var body = { model: String(model), max_tokens: 1024, messages: [{ role: "user", content: String(prompt) }] };
+    if (String(system || "") != "") { body.system = String(system); }
+    var t = Number(temperature);
+    if (!isNaN(t)) { body.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || "") != "" && !isNaN(mt)) { body.max_tokens = mt; }
+    __body = JSON.stringify(body);'
+↓Call_Messages [steps.TransactionStep-1791565384705]: 
+  comment: Calls the Anthropic Messages transaction.
+  sourceTransaction: lib_AIConnector.Anthropic.Messages
+  ↓__body [variables.StepVariable-1791565388539]: 
+    comment: JSON request body (model, max_tokens, system, messages), from the JavaScript scope (prepare)
+  ↓__header_x_api_key [variables.StepVariable-1791565391805]: 
+    comment: Anthropic API key, from the JavaScript scope (prepare)
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓__header_anthropic_version [variables.StepVariable-1791565396922]: 
+    comment: anthropic-version header (2023-06-01), from the JavaScript scope (prepare)
+↓Copy [steps.XMLCopyStep-1791565400141]: 
+  comment: Copies the Anthropic response document to the sequence output.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791565384705
+        - java.lang.String: 
+          - ↑value: ./document/*
+↓prompt [variables.RequestableVariable-1791565410546]: 
+  comment: The user prompt sent to the model (required)
+↓model [variables.RequestableVariable-1791565414099]: 
+  comment: Claude model id (claude-sonnet-4-5, claude-opus-4-5, claude-haiku-4-5...)
+  value: claude-sonnet-4-5
+↓system [variables.RequestableVariable-1791565418516]: 
+  comment: Optional system prompt (role / instructions)
+↓temperature [variables.RequestableVariable-1791565421722]: 
+  comment: Optional sampling temperature (0 to 1)
+↓max_tokens [variables.RequestableVariable-1791565425966]: 
+  comment: Maximum tokens in the response (required by the Anthropic API, default 1024)
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓api_key [variables.RequestableVariable-1791565430788]: 
+  comment: Anthropic API key. Empty = the default key from the lib_AIConnector.anthropic_apikey.secret symbol (administration console).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15

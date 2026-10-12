@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+		<title>Convertigo - Project</title>
+		<style>
+:root {
+	--bg: #f3f6fa;
+	--card: #ffffff;
+	--text: #1b2430;
+	--muted: #5b6574;
+	--accent: #00b2e3;
+	--accent-strong: #0081b2;
+	--border: #e0e6ee;
+	--shadow: 0 22px 60px rgba(15, 23, 42, 0.12), 0 6px 20px rgba(15, 23, 42, 0.08);
+	--color-tertiary-50: #f4f6f8;
+	--color-secondary-50: #f7fafc;
+	--color-primary-100: #cceaf6;
+	--color-surface-50: #e7f0fe;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html, body {
+	height: 100%;
+}
+
+@property --angle {
+	syntax: '<angle>';
+	inherits: false;
+	initial-value: 150deg;
+}
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+		--angle: 150deg;
+	}
+	50% {
+		background-position: 100% 50%;
+		--angle: 250deg;
+	}
+	100% {
+		background-position: 0% 50%;
+		--angle: 150deg;
+	}
+}
+
+body {
+	margin: 0;
+	font-family: "Avenir Next", "Avenir", "Helvetica Neue", sans-serif;
+	color: var(--text);
+	background-color: var(--color-surface-50);
+}
+
+.background-diagonal {
+	position: fixed;
+	inset: 0;
+	background-image: linear-gradient(
+		var(--angle),
+		var(--color-tertiary-50),
+		var(--color-secondary-50),
+		var(--color-primary-100),
+		var(--color-surface-50) 90%
+	);
+	background-size: 250% 250%;
+	animation: gradient 20s ease infinite;
+	clip-path: polygon(0 0, 100% 0, 100% 10%, 0 90%);
+	pointer-events: none;
+	z-index: 0;
+}
+
+main {
+	min-height: 100%;
+	display: grid;
+	place-items: center;
+	padding: 48px 24px 64px;
+	position: relative;
+	z-index: 1;
+}
+
+.card {
+	width: min(980px, 100%);
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 20px;
+	box-shadow: var(--shadow);
+	overflow: hidden;
+}
+
+.card-inner {
+	display: grid;
+	gap: 24px;
+	padding: 36px 40px 32px;
+	grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 18px;
+}
+
+.logo {
+	width: 130px;
+	height: auto;
+}
+
+.badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 6px 12px;
+	border-radius: 999px;
+	background: rgba(0, 178, 227, 0.12);
+	color: var(--accent-strong);
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 700;
+}
+
+h1 {
+	font-size: 22px;
+	line-height: 1.25;
+	margin: 16px 0 10px;
+}
+
+p {
+	margin: 0 0 10px;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+.highlight {
+	color: var(--text);
+	font-weight: 500;
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 14px;
+}
+
+.illustration {
+	width: 152px;
+	height: 193px;
+	margin-top: 18px;
+	border-radius: 14px;
+	display: block;
+	box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+	object-fit: contain;
+	background: #ffffff;
+}
+
+.illustration-wrap {
+	display: flex;
+	justify-content: center;
+}
+
+.panel {
+	border-radius: 16px;
+	border: 1px solid var(--border);
+	background: transparent;
+	padding: 20px 22px;
+	overflow: hidden;
+}
+
+.panel h2 {
+	font-size: 13px;
+	margin: 0 0 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted);
+}
+
+.list {
+	margin: 0;
+	padding: 0 0 0 2px;
+	list-style: none;
+	display: grid;
+	gap: 10px;
+}
+
+.list li {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	font-size: 14px;
+	color: var(--text);
+}
+
+.dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--accent);
+	margin-top: 6px;
+	flex: 0 0 auto;
+	box-shadow: 0 0 0 3px var(--card);
+}
+
+.footer {
+	padding: 18px 40px 28px;
+	border-top: 1px solid var(--border);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.footer span {
+	color: var(--text);
+	font-weight: 600;
+}
+
+@media (max-width: 820px) {
+	.card-inner {
+		grid-template-columns: 1fr;
+		padding: 28px 24px;
+	}
+
+	.logo {
+		width: 120px;
+	}
+
+	.illustration {
+		max-width: 100%;
+	}
+
+	.footer {
+		padding: 16px 24px 24px;
+	}
+}
+		</style>
+		<script src="cordova.js"></script>
+		<script>
+console.log("This is an unbuilt Convertigo Frontend Application.\nPlease use a Convertigo Studio to execute the MobileApplication/Application object from the current project.");
+window.setTimeout(function () {
+	try {
+		if (window.cordova) {
+			navigator.splashscreen.hide();
+			StatusBar.overlaysWebView(false);
+			StatusBar.backgroundColorByHexString("#00c6f9");
+			StatusBar.styleBlackOpaque();
+			StatusBar.show();
+		}
+	} catch (e) {
+		console.log("cordova failure: " + e, e);
+	}
+}, 1000);
+		</script>
+	</head>
+	<body>
+		<div class="background-diagonal" aria-hidden="true"></div>
+		<main>
+			<section class="card" role="status" aria-live="polite">
+				<div class="card-inner">
+					<div>
+						<div class="header">
+							<div class="badge">Awaiting build</div>
+							<img class="logo" alt="Convertigo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMMAAABGCAYAAABxAiDBAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyFpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuNS1jMDE0IDc5LjE1MTQ4MSwgMjAxMy8wMy8xMy0xMjowOToxNSAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENDIChXaW5kb3dzKSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo4OUQ5RkM0QUM0MjAxMUU0OUI4OUZFQTdGQTQ3Mzg1OSIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDo4OUQ5RkM0QkM0MjAxMUU0OUI4OUZFQTdGQTQ3Mzg1OSI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOjg5RDlGQzQ4QzQyMDExRTQ5Qjg5RkVBN0ZBNDczODU5IiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOjg5RDlGQzQ5QzQyMDExRTQ5Qjg5RkVBN0ZBNDczODU5Ii8+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+CJu9pwAADJ5JREFUeNrsXQuUlkUZ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"/>
+						</div>
+						<h1>This Frontend Application has not been built yet.</h1>
+						<p>Open it in <span class="highlight">Convertigo Studio</span> and run the <span class="highlight">MobileApplication / Application</span>.</p>
+						<p>Then build once with the <span class="highlight">Build</span> button using <span class="highlight">fast</span>, <span class="highlight">watch</span>, or <span class="highlight">prod</span> mode.</p>
+						<div class="illustration-wrap">
+							<img class="illustration" alt="" src="data:image/png;base64,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"/>
+						</div>
+					</div>
+					<div class="panel">
+						<h2>Next steps</h2>
+						<ul class="list">
+							<li><span class="dot"></span><span>Run once to generate required assets.</span></li>
+							<li><span class="dot"></span><span>Build a bundle for devices or the web.</span></li>
+							<li><span class="dot"></span><span>Refresh this page after the build completes.</span></li>
+						</ul>
+					</div>
+				</div>
+				<div class="footer">
+					<div><span>Convertigo Studio</span> displays build progress in the log view.</div>
+					<div>© <span id="year"></span> Convertigo</div>
+				</div>
+			</section>
+		</main>
+		<script>
+(function () {
+	var year = document.getElementById("year");
+	if (year) {
+		year.textContent = new Date().getFullYear();
+	}
+})();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,87 @@
+comment: |
+  'Chat completion through the Mistral AI API (api.mistral.ai, OpenAI-compatible /v1/chat/completions).
+  
+  Variables: prompt (required), model (default mistral-large-latest), system, temperature, max_tokens, api_key (empty = lib_AIConnector.mistral_apikey.secret symbol).
+  
+  Returns the provider response document (choices[0].message.content holds the answer).'
+↓prepare [steps.SimpleStep-1791566386616]: 
+  comment: 'Builds the Mistral chat/completions request: messages (system + user), Bearer Authorization header, model (default mistral-large-latest).'
+  expression: |
+    '// Builds the Mistral /v1/chat/completions request.
+    // Variables: prompt (required), model, system, temperature, max_tokens, api_key.
+    // Scope capture: assign through a parenthesized statement with a bare variable on the right-hand side.
+    var key = String(api_key || "").trim();
+    var auth;
+    if (key == "") {
+      // Default key: lib_AIConnector.mistral_apikey.secret symbol (administration console).
+      auth = ''Bearer ${lib_AIConnector.mistral_apikey.secret=}'';
+    } else {
+      auth = ''Bearer '' + key;
+    }
+    (__header_Authorization = auth) == '''';
+    var messages = [];
+    if (String(system || "") != "") {
+      messages.push({ role: "system", content: String(system) });
+    }
+    messages.push({ role: "user", content: String(prompt) });
+    var modelId = String(model || "");
+    if (modelId == "") { modelId = "mistral-large-latest"; }
+    var body = { model: modelId, messages: messages };
+    var t = Number(temperature);
+    if (String(temperature || "") != "" && !isNaN(t)) { body.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || "") != "" && !isNaN(mt)) { body.max_tokens = mt; }
+    __body = JSON.stringify(body);'
+↓Build_Auth [steps.ElementStep-1791797058092]: 
+  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.mistral_apikey.secret symbol) as a hidden element used as source by Call_ChatCompletions.
+  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.mistral_apikey.secret=}'').trim())'
+  nodeName: Auth
+  output: false
+↓Call_ChatCompletions [steps.TransactionStep-1791566390634]: 
+  comment: Calls the Mistral ChatCompletions transaction (OpenAI-compatible POST).
+  sourceTransaction: lib_AIConnector.Mistral.ChatCompletions
+  ↓__body [variables.StepVariable-1791566397379]: 
+    comment: JSON request body (model, messages), from the JavaScript scope (prepare)
+  ↓__header_Authorization [variables.StepVariable-1791566397391]: 
+    comment: Bearer Mistral API key header, from the JavaScript scope (prepare)
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791797058092
+          - java.lang.String: 
+            - ↑value: ./text()
+↓Copy [steps.XMLCopyStep-1791566397405]: 
+  comment: Copies the Mistral response document into the sequence output.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1791566390634
+        - java.lang.String: 
+          - ↑value: ./document/*
+↓prompt [variables.RequestableVariable-1791566401708]: 
+  comment: User prompt sent to the model (required).
+↓model [variables.RequestableVariable-1791566401722]: 
+  comment: 'Mistral model id (default mistral-large-latest); examples: mistral-small-latest, magistral-medium-latest, open-mistral-nemo.'
+  value: mistral-large-latest
+↓system [variables.RequestableVariable-1791566401735]: 
+  comment: Optional system prompt (role / instructions).
+↓temperature [variables.RequestableVariable-1791566401745]: 
+  comment: Sampling temperature (optional, 0-2).
+↓max_tokens [variables.RequestableVariable-1791566401760]: 
+  comment: Maximum number of tokens in the response (optional).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓api_key [variables.RequestableVariable-1791566401767]: 
+  comment: Mistral API key. Empty = lib_AIConnector.mistral_apikey.secret symbol (administration console).
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15

@@ -1,0 +1,108 @@
+comment: |
+  'Chat completion for any OpenAI-compatible /v1/chat/completions endpoint (OpenAI default, or any provider through base_url: Groq, OpenRouter, Together, DeepSeek, xAI, Perplexity, Ollama...).
+  
+  Variables: prompt (required), model (default gpt-4o-mini), system, temperature, max_tokens, base_url (empty = OpenAI), api_key (empty = lib_AIConnector.openai_apikey.secret symbol).
+  
+  The Build_Body / Build_Auth / Build_Uri steps build the request (JSON body, Bearer header, full URL) as hidden XML elements; the Call_Transaction step variables read them through sourceDefinition references.
+  
+  Returns the provider response document (choices[0].message.content holds the answer).'
+↓Build_Body [steps.ElementStep-1791797025703]: 
+  comment: Builds the chat/completions JSON body (model, messages, temperature, max_tokens) as a hidden element used as source by Call_Transaction.
+  expression: |
+    'var m = [];
+    if (String(system || '''') != '''') { m.push({ role: ''system'', content: String(system) }); }
+    m.push({ role: ''user'', content: String(prompt) });
+    var b = { model: String(model || ''gpt-4o-mini''), messages: m };
+    var t = Number(temperature);
+    if (String(temperature || '''') != '''' && !isNaN(t)) { b.temperature = t; }
+    var mt = Number(max_tokens);
+    if (String(max_tokens || '''') != '''' && !isNaN(mt)) { b.max_tokens = mt; }
+    JSON.stringify(b)'
+  nodeName: Body
+  output: false
+↓Build_Auth [steps.ElementStep-1791797025718]: 
+  comment: Builds the Authorization header value (Bearer + api_key or lib_AIConnector.openai_apikey.secret symbol) as a hidden element used as source by Call_Transaction.
+  expression: '''Bearer '' + (String(api_key || '''').trim() != '''' ? String(api_key).trim() : String(''${lib_AIConnector.openai_apikey.secret=}'').trim())'
+  nodeName: Auth
+  output: false
+↓Build_Uri [steps.ElementStep-1791797025728]: 
+  comment: Builds the full endpoint URL (base_url override for any OpenAI-compatible provider, default OpenAI) as a hidden element used as source by Call_Transaction.
+  expression: |
+    var base = String(base_url || '').trim();
+    if (base == '') { base = 'https://api.openai.com/v1/chat/completions'; }
+    if (base.indexOf('://') == -1) { base = 'https://' + base; }
+    if (!/\/chat\/completions\/?$/.test(base)) { base = base.replace(/\/+$/, '') + '/chat/completions'; }
+    base
+  nodeName: Uri
+  output: false
+↓Call_Transaction [steps.TransactionStep-1673537622312]: 
+  comment: Calls the AI connector ChatCompletions transaction (OpenAI-compatible POST).
+  sourceTransaction: lib_AIConnector.AI.ChatCompletions
+  ↓__body [variables.StepVariable-1673537622314]: 
+    comment: JSON request body (model, messages...), from the JavaScript scope (prepare)
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791797025703
+          - java.lang.String: 
+            - ↑value: ./text()
+  ↓__header_Authorization [variables.StepVariable-1673537723698]: 
+    comment: Bearer API key header, from the JavaScript scope (prepare)
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791797025718
+          - java.lang.String: 
+            - ↑value: ./text()
+  ↓__uri [variables.StepVariable-1791561657984]: 
+    comment: Full endpoint URL (any OpenAI-compatible provider), from the JavaScript scope (prepare)
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1791797025728
+          - java.lang.String: 
+            - ↑value: ./text()
+↓Copy [steps.XMLCopyStep-1673538799045]: 
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1673537622312
+        - java.lang.String: 
+          - ↑value: ./document/*
+↓prompt [variables.RequestableVariable-1673538273530]: 
+  comment: The user prompt sent to the model
+↓model [variables.RequestableVariable-1673705901844]: 
+  comment: 'Model id understood by the provider: gpt-4o-mini, gpt-4.1, o4-mini (OpenAI), mistral-large-latest (Mistral), llama-3.3-70b-versatile (Groq), etc. Empty = provider default.'
+  value: gpt-4o-mini
+↓temperature [variables.RequestableVariable-1673705914290]: 
+  comment: Sampling temperature, decimal 0 to 2 (provider dependent). Empty = provider default.
+  value: 
+↓system [variables.RequestableVariable-1791561664884]: 
+  comment: Optional system prompt (role / instructions) prepended to the user prompt
+↓max_tokens [variables.RequestableVariable-1791561667805]: 
+  comment: Optional maximum number of tokens in the response
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓base_url [variables.RequestableVariable-1791561671319]: 
+  comment: Base URL of any OpenAI-compatible provider (Mistral, Groq, OpenRouter, Together, DeepSeek, xAI, Perplexity, Ollama...). Empty = OpenAI. The sequence appends /chat/completions when missing.
+↓api_key [variables.RequestableVariable-1791561675253]: 
+  comment: 'Provider API key. Empty = the default key from the lib_AIConnector.openai_apikey.secret symbol (administration console). Prefer the symbol: pass a key only for a provider needing a different one.'
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓testOK [core.TestCase]: 
+  ↓prompt [variables.TestCaseVariable-1673538286652]: 
+    value: Brainstorm some ideas combining VR and fitness

@@ -1,0 +1,187 @@
+comment: |
+  'Hat (facade) sequence: routes a chat completion request to the right provider connector.
+  
+  Variables: provider (openai | anthropic | gemini | mistral, default openai), prompt (required), model, system, temperature, max_tokens, api_key (empty = the provider''s lib_AIConnector symbol), base_url (openai provider only: any OpenAI-compatible endpoint).
+  
+  Dispatch: openai -> ChatCompletion, anthropic -> AnthropicMessage, gemini -> GeminiMessage, mistral -> MistralMessage. The answer shape follows the target provider.'
+↓If_openai [steps.IfStep-1791566493053]: 
+  comment: 'provider openai (default): calls ChatCompletion (any OpenAI-compatible endpoint).'
+  condition: String(provider || 'openai').toLowerCase() == 'openai'
+  ↓Call_ChatCompletion [steps.SequenceStep-1791566497889]: 
+    comment: Calls ChatCompletion (any OpenAI-compatible provider).
+    output: true
+    sourceSequence: lib_AIConnector.ChatCompletion
+    ↓prompt [variables.StepVariable-1791566507626]: 
+      comment: User prompt, from the AIChat sequence scope
+    ↓model [variables.StepVariable-1791566507640]: 
+      comment: Model id, from the AIChat sequence scope
+    ↓system [variables.StepVariable-1791566507648]: 
+      comment: System prompt, from the AIChat sequence scope
+    ↓temperature [variables.StepVariable-1791566507657]: 
+      comment: Sampling temperature, from the AIChat sequence scope
+    ↓max_tokens [variables.StepVariable-1791566507668]: 
+      comment: Maximum tokens, from the AIChat sequence scope
+    ↓base_url [variables.StepVariable-1791566507678]: 
+      comment: OpenAI-compatible base URL, from the AIChat sequence scope
+    ↓api_key [variables.StepVariable-1791566507699]: 
+      comment: API key, from the AIChat sequence scope
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+↓If_anthropic [steps.IfStep-1791566493066]: 
+  comment: 'provider anthropic: calls AnthropicMessage.'
+  condition: String(provider || '').toLowerCase() == 'anthropic'
+  ↓Call_AnthropicMessage [steps.SequenceStep-1791566497908]: 
+    comment: Calls AnthropicMessage (Anthropic native Messages API).
+    output: true
+    sourceSequence: lib_AIConnector.AnthropicMessage
+    ↓prompt [variables.StepVariable-1791566507718]: 
+      comment: User prompt, from the AIChat sequence scope
+    ↓model [variables.StepVariable-1791566507732]: 
+      comment: Model id, from the AIChat sequence scope
+    ↓system [variables.StepVariable-1791566507739]: 
+      comment: System prompt, from the AIChat sequence scope
+    ↓temperature [variables.StepVariable-1791566507747]: 
+      comment: Sampling temperature, from the AIChat sequence scope
+    ↓max_tokens [variables.StepVariable-1791566507756]: 
+      comment: Maximum tokens, from the AIChat sequence scope
+    ↓api_key [variables.StepVariable-1791566507766]: 
+      comment: API key, from the AIChat sequence scope
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+↓If_gemini [steps.IfStep-1791566493079]: 
+  comment: 'provider gemini: calls GeminiMessage.'
+  condition: String(provider || '').toLowerCase() == 'gemini'
+  ↓Call_GeminiMessage [steps.SequenceStep-1791566497924]: 
+    comment: Calls GeminiMessage (Google Gemini, OpenAI-compatible endpoint).
+    output: true
+    sourceSequence: lib_AIConnector.GeminiMessage
+    ↓prompt [variables.StepVariable-1791566507772]: 
+      comment: User prompt, from the AIChat sequence scope
+    ↓model [variables.StepVariable-1791566507779]: 
+      comment: Model id, from the AIChat sequence scope
+    ↓system [variables.StepVariable-1791566507786]: 
+      comment: System prompt, from the AIChat sequence scope
+    ↓temperature [variables.StepVariable-1791566507793]: 
+      comment: Sampling temperature, from the AIChat sequence scope
+    ↓max_tokens [variables.StepVariable-1791566507801]: 
+      comment: Maximum tokens, from the AIChat sequence scope
+    ↓api_key [variables.StepVariable-1791566507808]: 
+      comment: API key, from the AIChat sequence scope
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+↓If_mistral [steps.IfStep-1791566493089]: 
+  comment: 'provider mistral: calls MistralMessage.'
+  condition: String(provider || '').toLowerCase() == 'mistral'
+  ↓Call_MistralMessage [steps.SequenceStep-1791566497933]: 
+    comment: Calls MistralMessage (Mistral AI).
+    output: true
+    sourceSequence: lib_AIConnector.MistralMessage
+    ↓prompt [variables.StepVariable-1791566507815]: 
+      comment: User prompt, from the AIChat sequence scope
+    ↓model [variables.StepVariable-1791566507821]: 
+      comment: Model id, from the AIChat sequence scope
+    ↓system [variables.StepVariable-1791566507831]: 
+      comment: System prompt, from the AIChat sequence scope
+    ↓temperature [variables.StepVariable-1791566507838]: 
+      comment: Sampling temperature, from the AIChat sequence scope
+    ↓max_tokens [variables.StepVariable-1791566507845]: 
+      comment: Maximum tokens, from the AIChat sequence scope
+    ↓api_key [variables.StepVariable-1791566507852]: 
+      comment: API key, from the AIChat sequence scope
+      value: 
+        - ↑ciphered: true
+        - ↑traceable: false
+        - →→: xd8e180806a1c1d83a6255212121ab827
+      visibility: 15
+↓provider [variables.RequestableVariable-1791566488788]: 
+  comment: 'Target provider: openai | anthropic | gemini | mistral. Default openai.'
+  value: openai
+↓prompt [variables.RequestableVariable-1791566488821]: 
+  comment: User prompt sent to the model (required).
+↓model [variables.RequestableVariable-1791566488834]: 
+  comment: Model id understood by the provider. Empty = the target sequence default (gpt-4o-mini, claude-sonnet-4-5, gemini-2.5-flash, mistral-large-latest).
+↓system [variables.RequestableVariable-1791566488842]: 
+  comment: Optional system prompt (role / instructions).
+↓temperature [variables.RequestableVariable-1791566488853]: 
+  comment: Optional sampling temperature (0-2, provider dependent).
+↓max_tokens [variables.RequestableVariable-1791566488861]: 
+  comment: Optional maximum number of tokens in the response.
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓api_key [variables.RequestableVariable-1791566488871]: 
+  comment: Provider API key. Empty = the provider's lib_AIConnector symbol.
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓base_url [variables.RequestableVariable-1791566488880]: 
+  comment: 'openai provider only: base URL of any OpenAI-compatible endpoint. Empty = OpenAI.'
+↓test_anthropic [core.TestCase]: 
+  comment: 'provider=anthropic: AnthropicMessage branch, default model claude-sonnet-4-5.'
+  ↓provider [variables.TestCaseVariable-1791795848965]: 
+    value: anthropic
+  ↓prompt [variables.TestCaseVariable-1791795848970]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795848972]: 
+    value: sk-ant-fake-key
+↓test_default_openai [core.TestCase]: 
+  comment: 'No provider: default openai branch must run (ChatCompletion, OpenAI endpoint).'
+  ↓prompt [variables.TestCaseVariable-1791795856341]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856344]: 
+    value: sk-fake-key
+↓test_gemini [core.TestCase]: 
+  comment: 'provider=gemini: GeminiMessage branch, default model gemini-2.5-flash.'
+  ↓provider [variables.TestCaseVariable-1791795856409]: 
+    value: gemini
+  ↓prompt [variables.TestCaseVariable-1791795856411]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856413]: 
+    value: fake-key
+↓test_mistral [core.TestCase]: 
+  comment: 'provider=mistral: MistralMessage branch, default model mistral-large-latest.'
+  ↓provider [variables.TestCaseVariable-1791795856415]: 
+    value: mistral
+  ↓prompt [variables.TestCaseVariable-1791795856417]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856419]: 
+    value: fake-key
+↓test_openai_base_url [core.TestCase]: 
+  comment: 'provider=openai + base_url: any OpenAI-compatible endpoint override.'
+  ↓provider [variables.TestCaseVariable-1791795856398]: 
+    value: openai
+  ↓prompt [variables.TestCaseVariable-1791795856400]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856402]: 
+    value: sk-fake-key
+  ↓base_url [variables.TestCaseVariable-1791795856404]: 
+    value: https://api.groq.com/openai/v1
+↓test_openai_explicit [core.TestCase]: 
+  comment: 'provider=openai: ChatCompletion branch, default model gpt-4o-mini.'
+  ↓provider [variables.TestCaseVariable-1791795856392]: 
+    value: openai
+  ↓prompt [variables.TestCaseVariable-1791795856394]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856396]: 
+    value: sk-fake-key
+↓test_unknown_provider [core.TestCase]: 
+  comment: 'Unknown provider: no branch runs, empty output (expected behavior, proves dispatch exclusivity).'
+  ↓provider [variables.TestCaseVariable-1791795856422]: 
+    value: cohere
+  ↓prompt [variables.TestCaseVariable-1791795856424]: 
+    value: Say OK
+  ↓api_key [variables.TestCaseVariable-1791795856426]: 
+    value: fake-key
