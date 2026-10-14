@@ -70,7 +70,7 @@
     Set their values in the administration console.
     '
   corsOrigin: =Origin
-  version: 1.0.10
+  version: 1.0.11
   ↓AI [connectors.HttpConnector]: 🗏 connectors/AI.yaml
   ↓Anthropic [connectors.HttpConnector]: 🗏 connectors/Anthropic.yaml
   ↓c8oforms_response_fs [connectors.FullSyncConnector]: 🗏 connectors/c8oforms_response_fs.yaml
@@ -80,6 +80,7 @@
   ↓AIChat [sequences.GenericSequence]: 🗏 sequences/AIChat.yaml
   ↓AnthropicMessage [sequences.GenericSequence]: 🗏 sequences/AnthropicMessage.yaml
   ↓ChatCompletion [sequences.GenericSequence]: 🗏 sequences/ChatCompletion.yaml
+  ↓EncryptAgentRunnerSecret [sequences.GenericSequence]: 🗏 sequences/EncryptAgentRunnerSecret.yaml
   ↓forms_HandleBatchPrompts [sequences.GenericSequence]: 🗏 sequences/forms_HandleBatchPrompts.yaml
   ↓formssource_Prompt [sequences.GenericSequence]: 🗏 sequences/formssource_Prompt.yaml
   ↓GeminiMessage [sequences.GenericSequence]: 🗏 sequences/GeminiMessage.yaml
