@@ -1,0 +1,67 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: |
+  'State of an AgentRunner job of the authenticated user: status, live progress (steps, latest reasoning, messages and actions), final message, error, cost and the output files the agent produced. A job of another user answers ''job not found''.
+  
+  Variable: jobId (from AgentRunnerJob).
+  
+  Output: {job: {jobId, status, createdAt, scheduledAt, startedAt, finishedAt, model, progress, finalMessage, error, costUsd, outputs: [{name, size, contentType}]}}. Status: draft, queued, scheduled, running, succeeded, failed, stopped (a limit was reached), cancelling, cancelled.'
+↓Prepare [steps.SimpleStep-1793090453222]: 
+  comment: Checks jobId.
+  expression: |
+    if (String(jobId || '').trim() == '') { throw 'jobId is required'; }
+    _use_docid = String(jobId).trim();
+↓Get [steps.TransactionStep-1793090453224]: 
+  comment: Reads the job doc.
+  sourceTransaction: lib_AIConnector.agentjobs.GetJob
+  ↓_use_docid [variables.StepVariable-1793090453226]: 
+    comment: From the sequence scope.
+↓GetDoc [steps.JsonSourceStep-1793090453228]: 
+  comment: The job doc.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090453224
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: doc
+↓Shape [steps.SimpleStep-1793090453230]: 
+  comment: Checks the caller owns the job, then keeps the fields a client needs (never the secrets nor the prompt files).
+  expression: |
+    'doc = doc && doc.couchdb_output !== undefined ? doc.couchdb_output : doc;  // JsonSource gives {couchdb_output: doc}
+    var me = String(context.getAuthenticatedUser() || '''');
+    if (me == '''' || !doc || doc.error || String(doc[''~c8oAcl''] || '''') != me) { throw ''job not found: '' + _use_docid; }
+    var r = doc.result || {};
+    var e = r[''export''] || {};
+    var runner = doc.runner || {};
+    var att = doc._attachments || {};
+    var outputs = [];
+    for (var k in att) {
+      if (k.indexOf(''output/'') == 0) { outputs.push({name: k.substring(7), size: att[k].length, contentType: att[k].content_type}); }
+    }
+    job = {
+      jobId: doc._id, status: doc.status, createdAt: doc.createdAt || null, scheduledAt: doc.scheduledAt || null,
+      startedAt: runner.startedAt || null, finishedAt: runner.finishedAt || null,
+      model: (r.model || {}).alias || (doc.vibe || {}).model || null,
+      progress: doc.progress || null, finalMessage: r.finalMessage || null, error: r.error || e.error || null,
+      costUsd: r.totalCostUsd != null ? r.totalCostUsd : (e.cost_usd != null ? e.cost_usd : null),
+      outputs: outputs
+    };'
+↓job [steps.JsonToXmlStep-1793090453232]: 
+  comment: 'Output: the job state.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: job
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: job
+↓jobId [variables.RequestableVariable-1793090453220]: 
+  comment: Id of the job, as returned by AgentRunnerJob.

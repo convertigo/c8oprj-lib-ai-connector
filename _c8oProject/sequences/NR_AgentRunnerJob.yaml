@@ -1,0 +1,233 @@
+accessibility: Private
+comment: 'Non-regression suite for AgentRunnerJob / AgentRunnerJobStatus / AgentRunnerJobCancel: starts a job scheduled in 2099 (never run, no LLM cost) with an input file, reads it, cancels it, and checks that another user can neither read nor cancel it. Reports PASS/FAIL per check. Needs the lib_AIConnector.agentrunner.key.secret symbol (AgentRunner key).'
+↓AsOwner [steps.SetAuthenticatedUserStep-1793090512207]: 
+  comment: Acts as the job owner.
+  userid: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: nr.agentrunner.owner
+↓init [steps.SimpleStep-1793090512210]: 
+  comment: Test helper and the inputs of the test job.
+  expression: |
+    'var results = [];
+    function __nr_check(name, ok, detail) {
+      results.push({name: name, status: ok ? ''PASS'' : ''FAIL'', detail: String(detail)});
+    }
+    // JsonSource steps give {document: content}
+    function __nr_doc(o) { return o && o.document !== undefined ? o.document : o; }
+    prompt = ''Reply with just the word OK.'';
+    api_key = ''nr-dummy-key-not-a-real-one'';
+    max_turns = ''3'';
+    scheduled_at = ''2099-01-01T00:00:00Z'';
+    files = [''js/nr_agentrunner_input.js''];'
+↓Call_start [steps.SequenceStep-1793090512212]: 
+  comment: 'Test 1: starts a scheduled job with one input file.'
+  sourceSequence: lib_AIConnector.AgentRunnerJob
+  ↓prompt [variables.StepVariable-1793090512215]: 
+    comment: From the sequence scope.
+  ↓api_key [variables.StepVariable-1793090512217]: 
+    comment: Dummy key, from the sequence scope.
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓max_turns [variables.StepVariable-1793090512219]: 
+    comment: From the sequence scope.
+  ↓scheduled_at [variables.StepVariable-1793090512221]: 
+    comment: From the sequence scope.
+  ↓files [variables.StepMultiValuedVariable-1793090512223]: 
+    comment: From the sequence scope.
+↓get_start [steps.JsonSourceStep-1793090512225]: 
+  comment: AgentRunnerJob answer.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090512212
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: start
+↓check_start [steps.SimpleStep-1793090512228]: 
+  comment: Asserts the job id, the scheduled status and the attached input.
+  expression: |
+    'start = __nr_doc(start);
+    jobId = start && start.jobId ? String(start.jobId) : '''';
+    __nr_check(''start: job id'', jobId.indexOf(''job-'') == 0, JSON.stringify(start).substring(0, 400));
+    __nr_check(''start: scheduled'', start && start.status == ''scheduled'', start && start.status);
+    var ins = start && start.inputs ? [].concat(start.inputs) : [];
+    __nr_check(''start: input file attached'', ins.join('','').indexOf(''nr_agentrunner_input.js'') >= 0, ins.join('',''));'
+↓Call_status [steps.SequenceStep-1793090512230]: 
+  comment: 'Test 2: the owner reads the job.'
+  sourceSequence: lib_AIConnector.AgentRunnerJobStatus
+  ↓jobId [variables.StepVariable-1793090512232]: 
+    comment: From the sequence scope.
+↓get_status [steps.JsonSourceStep-1793090512234]: 
+  comment: AgentRunnerJobStatus answer.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090512230
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: status1
+↓check_status [steps.SimpleStep-1793090512236]: 
+  comment: Asserts the owner sees the job, scheduled.
+  expression: |
+    'status1 = __nr_doc(status1);
+    var j = status1 && status1.job;
+    __nr_check(''status: owner sees the job'', j && j.jobId == jobId && j.status == ''scheduled'', JSON.stringify(status1).substring(0, 300));'
+↓AsIntruder [steps.SetAuthenticatedUserStep-1793090512238]: 
+  comment: Acts as another user.
+  userid: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: nr.agentrunner.intruder
+↓Call_status_intruder [steps.SequenceStep-1793090512240]: 
+  comment: 'Test 3: another user reads the job.'
+  sourceSequence: lib_AIConnector.AgentRunnerJobStatus
+  ↓jobId [variables.StepVariable-1793090512242]: 
+    comment: From the sequence scope.
+↓get_status_intruder [steps.JsonSourceStep-1793090512244]: 
+  comment: AgentRunnerJobStatus answer for the other user.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090512240
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: status2
+↓Call_cancel_intruder [steps.SequenceStep-1793090512246]: 
+  comment: 'Test 4: another user cancels the job.'
+  sourceSequence: lib_AIConnector.AgentRunnerJobCancel
+  ↓jobId [variables.StepVariable-1793090512248]: 
+    comment: From the sequence scope.
+↓get_cancel_intruder [steps.JsonSourceStep-1793090512250]: 
+  comment: AgentRunnerJobCancel answer for the other user.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090512246
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: cancel2
+↓check_intruder [steps.SimpleStep-1793090512252]: 
+  comment: Asserts the other user gets no job and cannot cancel it.
+  expression: |
+    'status2 = __nr_doc(status2);
+    cancel2 = __nr_doc(cancel2);
+    __nr_check(''isolation: other user cannot read'', !(status2 && status2.job) && JSON.stringify(status2).indexOf(''job not found'') >= 0, JSON.stringify(status2).substring(0, 300));
+    __nr_check(''isolation: other user cannot cancel'', !(cancel2 && String(cancel2.cancelled) == ''true'') && JSON.stringify(cancel2).indexOf(''job not found'') >= 0, JSON.stringify(cancel2).substring(0, 300));'
+↓AsOwnerAgain [steps.SetAuthenticatedUserStep-1793090512254]: 
+  comment: Back to the job owner.
+  userid: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: nr.agentrunner.owner
+↓Call_cancel [steps.SequenceStep-1793090512256]: 
+  comment: 'Test 5: the owner cancels the job.'
+  sourceSequence: lib_AIConnector.AgentRunnerJobCancel
+  ↓jobId [variables.StepVariable-1793090512258]: 
+    comment: From the sequence scope.
+↓get_cancel [steps.JsonSourceStep-1793090512260]: 
+  comment: AgentRunnerJobCancel answer.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090512256
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: cancel1
+↓check_cancel [steps.SimpleStep-1793090512262]: 
+  comment: Asserts the owner's cancel is requested.
+  expression: |
+    'cancel1 = __nr_doc(cancel1);
+    __nr_check(''cancel: owner cancels'', cancel1 && cancel1.status == ''cancelling'' && String(cancel1.cancelled) == ''true'', JSON.stringify(cancel1));'
+↓init_cleanup [steps.SimpleStep-1793091796045]: 
+  comment: Prepares the wait for the daemon's cancel and the deletion of the test job.
+  expression: |
+    cleanDone = jobId == '';
+    cleanPolls = 0;
+    finalJob = null;
+    _use_docid = jobId;
+↓WaitCancelled [steps.WhileStep-1793091796096]: 
+  comment: Waits (15 s at most) for the daemon to set the cancelled job to cancelled.
+  condition: '!cleanDone'
+  ↓pause [steps.SimpleStep-1793091796105]: 
+    comment: 1 s between two polls.
+    expression: |
+      java.lang.Thread.sleep(1000);
+      cleanPolls++;
+  ↓Call_status_end [steps.SequenceStep-1793091796107]: 
+    comment: Reads the job state.
+    sourceSequence: lib_AIConnector.AgentRunnerJobStatus
+    ↓jobId [variables.StepVariable-1793091796112]: 
+      comment: From the sequence scope.
+  ↓get_status_end [steps.JsonSourceStep-1793091796114]: 
+    comment: AgentRunnerJobStatus answer.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1793091796107
+          - java.lang.String: 
+            - ↑value: ./document
+    variableName: statusEnd
+  ↓update [steps.SimpleStep-1793091796120]: 
+    comment: Stops once the job is cancelled, or after 15 polls.
+    expression: |
+      'statusEnd = __nr_doc(statusEnd);
+      finalJob = statusEnd && statusEnd.job ? statusEnd.job : finalJob;
+      cleanDone = (finalJob && finalJob.status == ''cancelled'') || cleanPolls >= 15;'
+↓Cleanup [steps.TransactionStep-1793091796149]: 
+  comment: Deletes the test job doc.
+  sourceTransaction: lib_AIConnector.agentjobs.DeleteJob
+  ↓_use_docid [variables.StepVariable-1793091796155]: 
+    comment: From the sequence scope.
+↓get_cleanup [steps.JsonSourceStep-1793091796193]: 
+  comment: CouchDB answer to the deletion.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793091796149
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: cleaned
+↓check_cleanup [steps.SimpleStep-1793091796234]: 
+  comment: Asserts the daemon cancelled the job and the test job was deleted.
+  expression: |
+    'cleaned = cleaned && cleaned.couchdb_output !== undefined ? cleaned.couchdb_output : cleaned;
+    __nr_check(''cancel: daemon sets cancelled'', finalJob && finalJob.status == ''cancelled'', (finalJob && finalJob.status) + '' after '' + cleanPolls + '' s'');
+    __nr_check(''cleanup: test job deleted'', cleaned && String(cleaned.ok) == ''true'', JSON.stringify(cleaned).substring(0, 200));'
+↓results [steps.JsonToXmlStep-1793090512264]: 
+  comment: 'Output: one PASS/FAIL entry per check.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: results
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: results

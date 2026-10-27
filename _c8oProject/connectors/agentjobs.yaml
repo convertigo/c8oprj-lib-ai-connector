@@ -1,0 +1,35 @@
+comment: 'FullSync database of the AgentRunner jobs (CouchDB database agentjobs, named after this connector), watched by the AgentRunner daemon: one doc per agent job, owned by the user who created it (~c8oAcl).'
+databaseName: agentjobs
+↓CreateJob [transactions.couchdb.PostDocumentTransaction]: 
+  comment: Creates a job doc from the JSON in _use_json_base (its _id included), owned by the authenticated user (~c8oAcl).
+  ↓_use_json_base [variables.RequestableVariable-1793090228782]: 
+    comment: The whole job doc as a JSON string (holds the encrypted secrets only).
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓DeleteJob [transactions.couchdb.DeleteDocumentTransaction]: 
+  comment: 'Deletes a job doc by id: used by the NR_AgentRunnerJob* test sequences to remove their test jobs.'
+  ↓_use_docid [variables.RequestableVariable-1793091764374]: 
+    comment: Job doc id.
+↓GetJob [transactions.couchdb.GetDocumentTransaction]: 
+  comment: 'Reads one job doc by id (no ACL filtering server side: callers check the owner).'
+  ↓_use_docid [variables.RequestableVariable-1793090228791]: 
+    comment: Job doc id.
+↓PutInput [transactions.couchdb.PutDocumentAttachmentTransaction]: 
+  comment: Attaches an uploaded file to a job doc (as input/<name>, fetched into the agent's working directory).
+  ↓_use_docid [variables.RequestableVariable-1793090228794]: 
+    comment: Job doc id.
+  ↓_use_attname [variables.RequestableVariable-1793090228796]: 
+    comment: Attachment name, input/<file name>.
+  ↓_use_attpath [variables.RequestableVariable-1793090228798]: 
+    comment: Path of the uploaded file on the server.
+  ↓_use_attcontent_type [variables.RequestableVariable-1793090228800]: 
+    comment: MIME type of the file.
+↓UpdateJob [transactions.couchdb.PostDocumentTransaction]: 
+  comment: Merges the fields of the JSON in _use_json_base (with its _id) into an existing job doc, keeping its owner.
+  fullSyncAclPolicy: noOp
+  policy: merge
+  ↓_use_json_base [variables.RequestableVariable-1793090228788]: 
+    comment: JSON string with the _id of the job doc and the fields to change.

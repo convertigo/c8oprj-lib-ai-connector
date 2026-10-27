@@ -1,0 +1,254 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: |
+  'Starts an AgentRunner agent job: writes a job doc in the agentjobs FullSync database, owned by the authenticated user, with the LLM API key encrypted for the AgentRunner daemon (EncryptAgentRunnerSecret) and the uploaded files attached as input/<name>; the daemon then runs it in its own Kubernetes Job.
+  
+  Variables: prompt (required), api_key (the client''s LLM API key; empty = the default key of the lib_AIConnector.agentrunner.api_key.secret symbol; never stored in clear), api_key_name (name of the job secret, default LITELLM_API_KEY, the name the cluster requires), model (catalog alias, e.g. glm or large4; empty = cluster default), max_price / max_turns / time_limit (empty = cluster defaults), scheduled_at (ISO 8601: run later instead of now), files (uploaded files given to the agent).
+  
+  Output: {jobId, status (queued or scheduled), inputs}. Follow it with AgentRunnerJobStatus, stop it with AgentRunnerJobCancel.
+  
+  Private and authenticated: call it from an application sequence (SequenceStep) in the user''s session, which sets the job owner.
+  
+  Symbols: lib_AIConnector.agentrunner.key.secret (the AgentRunner encryption key, required, see EncryptAgentRunnerSecret) and lib_AIConnector.agentrunner.api_key.secret (optional default LLM API key).'
+↓Prepare [steps.SimpleStep-1793090395684]: 
+  comment: 'Checks the inputs and sets jobId, jobStatus and the value to encrypt: the api_key variable, else the lib_AIConnector.agentrunner.api_key.secret symbol.'
+  expression: |
+    '// JsonSource steps give {<element name>: content}: __ar_un unwraps it
+    function __ar_un(o, k) { return o && o[k] !== undefined ? o[k] : o; }
+    function __ar_check(r, what) {
+      r = __ar_un(r, ''couchdb_output'');
+      if (!r || (r.ok !== true && String(r.ok) !== ''true'')) { throw what + '' failed: '' + JSON.stringify(r); }
+    }
+    if (String(prompt || '''').trim() == '''') { throw ''prompt is required''; }
+    // the client''s own key, else the shared default key of the symbol
+    value = String(api_key || '''').trim();
+    if (value == '''') { value = String(''${lib_AIConnector.agentrunner.api_key.secret=}'').trim(); }
+    if (value == '''') { throw "api_key is required: the client''s LLM API key, or a default key in the lib_AIConnector.agentrunner.api_key.secret symbol"; }
+    jobId = ''job-'' + String(java.util.UUID.randomUUID());
+    jobStatus = String(scheduled_at || '''').trim() != '''' ? ''scheduled'' : ''queued'';'
+↓Encrypt [steps.SequenceStep-1793090395686]: 
+  comment: Encrypts the client's key for the AgentRunner daemon.
+  sourceSequence: lib_AIConnector.EncryptAgentRunnerSecret
+  ↓value [variables.StepVariable-1793090395688]: 
+    comment: The client's key, from the sequence scope.
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓GetEnvelope [steps.JsonSourceStep-1793090395690]: 
+  comment: 'EncryptAgentRunnerSecret answer: {envelope: {$enc, iv, ct}}, or its error.'
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090395686
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: encOut
+↓BuildDoc [steps.SimpleStep-1793090395692]: 
+  comment: Builds the job doc (status draft until its files are attached) and the list of files to attach.
+  expression: |
+    'var enc = __ar_un(encOut, ''document'');
+    var envelope = enc && enc.envelope;
+    if (!envelope || !envelope.ct) {
+      var why = ''no envelope'';
+      if (enc && enc.error) {
+        var d = String(enc.error.details || enc.error.message);
+        var m = d.match(/error has occured: ([^\n]*)/);
+        why = m ? m[1] : d;
+      }
+      throw ''encrypting the API key failed: '' + why;
+    }
+    var vibe = {};
+    if (String(model || '''').trim() != '''') { vibe.model = String(model).trim(); }
+    function __ar_num(v, name) {
+      var s = String(v || '''').trim();
+      if (s == '''') { return; }
+      var n = Number(s);
+      if (isNaN(n)) { throw name + '' must be a number''; }
+      vibe[name] = n;
+    }
+    __ar_num(max_price, ''max_price'');
+    __ar_num(max_turns, ''max_turns'');
+    __ar_num(time_limit, ''time_limit'');
+    var secrets = {};
+    secrets[String(api_key_name || '''').trim() || ''LITELLM_API_KEY''] = envelope;
+    _use_json_base = JSON.stringify({
+      _id: jobId, type: ''agentrunner.job'', status: ''draft'', createdAt: new Date().toISOString(),
+      prompt: String(prompt), vibe: vibe, secrets: secrets
+    });
+    // files: a Java array or list (multi-valued variable), a JS array, or a single value
+    var raw = [];
+    if (files != null) {
+      if (files instanceof java.util.Collection) { raw = files.toArray(); }
+      else if (files instanceof java.lang.String || typeof files == ''string'') { raw = [files]; }
+      else { raw = files; }
+    }
+    fileList = [];
+    for (var i = 0; i < raw.length; i++) {
+      var f = String(raw[i] == null ? '''' : raw[i]).trim();
+      if (f != '''') { fileList.push(f); }
+    }
+    inputNames = [];'
+↓Create [steps.TransactionStep-1793090395694]: 
+  comment: Creates the job doc, owned by the authenticated user.
+  sourceTransaction: lib_AIConnector.agentjobs.CreateJob
+  ↓_use_json_base [variables.StepVariable-1793090395697]: 
+    comment: The job doc, from the sequence scope.
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+↓GetCreated [steps.JsonSourceStep-1793090395699]: 
+  comment: CouchDB answer to the creation.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090395694
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: created
+↓CheckCreated [steps.SimpleStep-1793090395701]: 
+  comment: Fails when the doc was not created.
+  expression: __ar_check(created, 'creating the job doc');
+↓EachFile [steps.SimpleIteratorStep-1793090395703]: 
+  comment: Attaches each uploaded file as input/<name>.
+  expression: fileList
+  ↓PrepareFile [steps.SimpleStep-1793090395705]: 
+    comment: Resolves the file (relative test paths against the projects directory), its attachment name and MIME type.
+    expression: |
+      'var f = new java.io.File(String(item));
+      if (!f.exists()) {
+        var pd = String(com.twinsoft.convertigo.engine.Engine.PROJECTS_PATH);
+        var c1 = new java.io.File(pd + ''/lib_AIConnector/'' + String(item));
+        var c2 = new java.io.File(pd + ''/'' + String(item));
+        f = c1.exists() ? c1 : (c2.exists() ? c2 : f);
+      }
+      if (!f.exists()) { throw ''file not found: '' + String(item); }
+      _use_docid = jobId;
+      _use_attpath = String(f.getAbsolutePath());
+      _use_attname = ''input/'' + String(f.getName());
+      _use_attcontent_type = String(java.nio.file.Files.probeContentType(f.toPath()) || ''application/octet-stream'');
+      inputNames.push(String(f.getName()));'
+  ↓Attach [steps.TransactionStep-1793090395707]: 
+    comment: Attaches the file to the job doc.
+    sourceTransaction: lib_AIConnector.agentjobs.PutInput
+    ↓_use_docid [variables.StepVariable-1793090395709]: 
+      comment: From the sequence scope.
+    ↓_use_attname [variables.StepVariable-1793090395711]: 
+      comment: From the sequence scope.
+    ↓_use_attpath [variables.StepVariable-1793090395713]: 
+      comment: From the sequence scope.
+    ↓_use_attcontent_type [variables.StepVariable-1793090395715]: 
+      comment: From the sequence scope.
+  ↓GetAttached [steps.JsonSourceStep-1793090395717]: 
+    comment: CouchDB answer to the attachment.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1793090395707
+          - java.lang.String: 
+            - ↑value: ./document/couchdb_output
+    variableName: attached
+  ↓CheckAttached [steps.SimpleStep-1793090395719]: 
+    comment: Fails when the file was not attached.
+    expression: __ar_check(attached, 'attaching ' + _use_attname);
+↓BuildQueue [steps.SimpleStep-1793090395721]: 
+  comment: 'The change that hands the job to the daemon: queued, or scheduled at scheduled_at.'
+  expression: |
+    'var u = {_id: jobId, status: jobStatus};
+    if (jobStatus == ''scheduled'') { u.scheduledAt = String(scheduled_at).trim(); }
+    _use_json_base = JSON.stringify(u);'
+↓Queue [steps.TransactionStep-1793090395723]: 
+  comment: 'Sets the job doc to queued or scheduled: from now on the daemon takes it.'
+  sourceTransaction: lib_AIConnector.agentjobs.UpdateJob
+  ↓_use_json_base [variables.StepVariable-1793090395725]: 
+    comment: From the sequence scope.
+↓GetQueued [steps.JsonSourceStep-1793090395727]: 
+  comment: CouchDB answer to the status change.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090395723
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: queued
+↓CheckQueued [steps.SimpleStep-1793090395729]: 
+  comment: Fails when the job could not be queued.
+  expression: __ar_check(queued, 'queuing the job');
+↓jobId [steps.JsonToXmlStep-1793090395731]: 
+  comment: 'Output: id of the job doc.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: jobId
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: jobId
+↓status [steps.JsonToXmlStep-1793090395733]: 
+  comment: 'Output: queued or scheduled.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: jobStatus
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: status
+↓inputs [steps.JsonToXmlStep-1793090395735]: 
+  comment: 'Output: names of the attached input files.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: inputNames
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: inputs
+↓prompt [variables.RequestableVariable-1793090395668]: 
+  comment: What the agent must do. Required.
+↓api_key [variables.RequestableVariable-1793090395670]: 
+  comment: The client's LLM API key (e.g. LiteLLM gateway key). Empty = the default key of the lib_AIConnector.agentrunner.api_key.secret symbol. Encrypted before it is stored, masked everywhere.
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: 15
+↓model [variables.RequestableVariable-1793090395672]: 
+  comment: Model alias of the AgentRunner catalog (glm, large4...). Empty = cluster default.
+↓max_price [variables.RequestableVariable-1793090395674]: 
+  comment: Budget in $ for the job. Empty = cluster default.
+↓max_turns [variables.RequestableVariable-1793090395676]: 
+  comment: Maximum agent turns. Empty = cluster default.
+↓time_limit [variables.RequestableVariable-1793090395678]: 
+  comment: Time limit in seconds. Empty = cluster default.
+↓scheduled_at [variables.RequestableVariable-1793090395680]: 
+  comment: ISO 8601 date-time (UTC if no offset) to run the job later. Empty = run now.
+↓files [variables.RequestableMultiValuedVariable-1793090395682]: 
+  comment: 'Files given to the agent: attached to the job doc as input/<name>, found by the agent in its working directory. Multipart upload; in tests, paths relative to the projects directory.'
+  isFileUpload: true
+↓api_key_name [variables.RequestableVariable-1793090868288]: 
+  comment: Name of the job secret holding the key, i.e. the environment variable the cluster's LLM provider reads. Default LITELLM_API_KEY; set it only if the cluster expects another name.
+  value: LITELLM_API_KEY

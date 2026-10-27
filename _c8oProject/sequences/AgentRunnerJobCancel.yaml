@@ -1,0 +1,107 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: |
+  'Cancels an AgentRunner job of the authenticated user: sets it to cancelling; the daemon stops its Kubernetes Job (the agent keeps what it did: partial result and files) or, if it had not started, sets it to cancelled. A finished job is left as it is. A job of another user answers ''job not found''.
+  
+  Variable: jobId.
+  
+  Output: {jobId, status (cancelling, or the unchanged final status), cancelled (true when the cancel was requested)}.'
+↓Prepare [steps.SimpleStep-1793090453256]: 
+  comment: Checks jobId.
+  expression: |
+    if (String(jobId || '').trim() == '') { throw 'jobId is required'; }
+    _use_docid = String(jobId).trim();
+↓Get [steps.TransactionStep-1793090453258]: 
+  comment: Reads the job doc.
+  sourceTransaction: lib_AIConnector.agentjobs.GetJob
+  ↓_use_docid [variables.StepVariable-1793090453260]: 
+    comment: From the sequence scope.
+↓GetDoc [steps.JsonSourceStep-1793090453262]: 
+  comment: The job doc.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793090453258
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: doc
+↓Decide [steps.SimpleStep-1793090453264]: 
+  comment: Checks the caller owns the job and whether it can still be cancelled.
+  expression: |
+    'doc = doc && doc.couchdb_output !== undefined ? doc.couchdb_output : doc;  // JsonSource gives {couchdb_output: doc}
+    var me = String(context.getAuthenticatedUser() || '''');
+    if (me == '''' || !doc || doc.error || String(doc[''~c8oAcl''] || '''') != me) { throw ''job not found: '' + _use_docid; }
+    var st = String(doc.status);
+    cancellable = st == ''draft'' || st == ''queued'' || st == ''scheduled'' || st == ''running'';
+    newStatus = cancellable ? ''cancelling'' : st;
+    _use_json_base = JSON.stringify({_id: doc._id, status: ''cancelling''});'
+↓IfCancellable [steps.IfStep-1793090453266]: 
+  comment: Only a job not finished yet is set to cancelling.
+  condition: cancellable
+  ↓Cancel [steps.TransactionStep-1793090453268]: 
+    comment: Sets the job doc to cancelling, for the daemon.
+    sourceTransaction: lib_AIConnector.agentjobs.UpdateJob
+    ↓_use_json_base [variables.StepVariable-1793090453270]: 
+      comment: From the sequence scope.
+  ↓GetCancelled [steps.JsonSourceStep-1793090453272]: 
+    comment: CouchDB answer to the status change.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1793090453268
+          - java.lang.String: 
+            - ↑value: ./document/couchdb_output
+    variableName: updated
+  ↓CheckCancelled [steps.SimpleStep-1793090453274]: 
+    comment: Fails when the status could not be changed.
+    expression: |
+      'updated = updated && updated.couchdb_output !== undefined ? updated.couchdb_output : updated;
+      if (!updated || (updated.ok !== true && String(updated.ok) !== ''true'')) { throw ''cancelling the job failed: '' + JSON.stringify(updated); }'
+↓outJobId [steps.JsonToXmlStep-1793090453276]: 
+  comment: 'Output: id of the job.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: _use_docid
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: jobId
+↓status [steps.JsonToXmlStep-1793090453278]: 
+  comment: 'Output: cancelling, or the unchanged final status.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: newStatus
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: status
+↓cancelled [steps.JsonToXmlStep-1793090453280]: 
+  comment: 'Output: true when the cancel was requested.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: cancellable
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: cancelled
+↓jobId [variables.RequestableVariable-1793090453254]: 
+  comment: Id of the job, as returned by AgentRunnerJob.

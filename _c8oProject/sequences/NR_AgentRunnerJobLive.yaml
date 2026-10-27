@@ -1,0 +1,149 @@
+accessibility: Private
+comment: 'End-to-end test of AgentRunnerJob on a live AgentRunner cluster: starts a small real job with the default LLM key (lib_AIConnector.agentrunner.api_key.secret symbol, api_key left empty), polls AgentRunnerJobStatus every 3 s until it ends (5 min at most), then checks status, answer, model and cost. Costs a few cents of LLM usage. Reports PASS/FAIL per check and the job''s progress history.'
+responseTimeout: 600
+↓AsOwner [steps.SetAuthenticatedUserStep-1793091561347]: 
+  comment: Acts as the job owner.
+  userid: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: nr.agentrunner.owner
+↓init [steps.SimpleStep-1793091561350]: 
+  comment: Test helper and the inputs of the live job.
+  expression: |
+    'var results = [];
+    function __nr_check(name, ok, detail) {
+      results.push({name: name, status: ok ? ''PASS'' : ''FAIL'', detail: String(detail)});
+    }
+    function __nr_doc(o) { return o && o.document !== undefined ? o.document : o; }
+    prompt = ''Reply with just the word OK.'';
+    api_key = '''';
+    max_turns = ''3'';
+    done = false;
+    polls = 0;
+    job = null;'
+↓Call_start [steps.SequenceStep-1793091561352]: 
+  comment: Starts the job, with the default LLM key.
+  sourceSequence: lib_AIConnector.AgentRunnerJob
+  ↓prompt [variables.StepVariable-1793091561356]: 
+    comment: From the sequence scope.
+  ↓api_key [variables.StepVariable-1793091561358]: 
+    comment: 'Empty: the default key of the symbol.'
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: xd8e180806a1c1d83a6255212121ab827
+    visibility: 15
+  ↓max_turns [variables.StepVariable-1793091561360]: 
+    comment: From the sequence scope.
+↓get_start [steps.JsonSourceStep-1793091561362]: 
+  comment: AgentRunnerJob answer.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793091561352
+        - java.lang.String: 
+          - ↑value: ./document
+  variableName: start
+↓check_start [steps.SimpleStep-1793091561364]: 
+  comment: Asserts the job is queued.
+  expression: |
+    'start = __nr_doc(start);
+    jobId = start && start.jobId ? String(start.jobId) : '''';
+    __nr_check(''start: queued'', jobId.indexOf(''job-'') == 0 && start.status == ''queued'', JSON.stringify(start).substring(0, 400));
+    done = jobId == '''';'
+↓WaitForEnd [steps.WhileStep-1793091561366]: 
+  comment: Polls the job status every 3 s until it ends (5 min at most).
+  condition: '!done'
+  ↓pause [steps.SimpleStep-1793091561369]: 
+    comment: 3 s between two polls.
+    expression: |
+      java.lang.Thread.sleep(3000);
+      polls++;
+  ↓Call_status [steps.SequenceStep-1793091561371]: 
+    comment: Reads the job state.
+    sourceSequence: lib_AIConnector.AgentRunnerJobStatus
+    ↓jobId [variables.StepVariable-1793091561373]: 
+      comment: From the sequence scope.
+  ↓get_status [steps.JsonSourceStep-1793091561375]: 
+    comment: AgentRunnerJobStatus answer.
+    sourceDefinition: 
+      - xmlizable: 
+        - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+        - com.twinsoft.convertigo.beans.common.XMLVector: 
+          - java.lang.String: 
+            - ↑value: 1793091561371
+          - java.lang.String: 
+            - ↑value: ./document
+    variableName: polled
+  ↓update [steps.SimpleStep-1793091561377]: 
+    comment: Stops on a final status or after 100 polls.
+    expression: |
+      'polled = __nr_doc(polled);
+      job = polled && polled.job ? polled.job : job;
+      var st = job ? String(job.status) : '''';
+      done = [''succeeded'', ''failed'', ''stopped'', ''cancelled''].indexOf(st) >= 0 || polls >= 100;'
+↓check_end [steps.SimpleStep-1793091561379]: 
+  comment: Asserts the job succeeded with the expected answer, model and a cost.
+  expression: |
+    'var j = job || {};
+    __nr_check(''end: succeeded'', j.status == ''succeeded'', j.status + '' after '' + polls + '' polls'' + (j.error ? '': '' + j.error : ''''));
+    __nr_check(''end: answer OK'', /\bOK\b/.test(String(j.finalMessage || '''')), j.finalMessage);
+    __nr_check(''end: model recorded'', !!j.model, j.model);
+    __nr_check(''end: cost recorded'', Number(j.costUsd) > 0, j.costUsd);
+    var h = j.progress && j.progress.history ? [].concat(j.progress.history) : [];
+    __nr_check(''end: progress history'', h.length > 0, h.length + '' entries'');
+    history = h;
+    _use_docid = jobId;  // for Cleanup'
+↓Cleanup [steps.TransactionStep-1793091796286]: 
+  comment: Deletes the test job doc.
+  sourceTransaction: lib_AIConnector.agentjobs.DeleteJob
+  ↓_use_docid [variables.StepVariable-1793091796291]: 
+    comment: The job id, set by check_end.
+↓get_cleanup [steps.JsonSourceStep-1793091796318]: 
+  comment: CouchDB answer to the deletion.
+  sourceDefinition: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.common.XMLVector
+      - com.twinsoft.convertigo.beans.common.XMLVector: 
+        - java.lang.String: 
+          - ↑value: 1793091796286
+        - java.lang.String: 
+          - ↑value: ./document/couchdb_output
+  variableName: cleaned
+↓check_cleanup [steps.SimpleStep-1793091796350]: 
+  comment: Asserts the test job was deleted.
+  expression: |
+    'cleaned = cleaned && cleaned.couchdb_output !== undefined ? cleaned.couchdb_output : cleaned;
+    __nr_check(''cleanup: test job deleted'', cleaned && String(cleaned.ok) == ''true'', JSON.stringify(cleaned).substring(0, 200));'
+↓results [steps.JsonToXmlStep-1793091561381]: 
+  comment: 'Output: one PASS/FAIL entry per check.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: results
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: results
+↓jobOut [steps.JsonToXmlStep-1793091561383]: 
+  comment: 'Output: the final job state.'
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: job
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: job

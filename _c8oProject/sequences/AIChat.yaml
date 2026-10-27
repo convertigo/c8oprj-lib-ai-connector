@@ -12,7 +12,7 @@ comment: |
   - openai: AI.UploadFile purpose=vision/user_data -> file_id in input_image/input_file (Responses API)
   - anthropic: Anthropic.UploadFile (files API beta) -> file_id in the chat message (PDF and images)
   - gemini: Gemini.UploadStart + Gemini.UploadFile (resumable upload, x-goog headers) -> file URI in the chat message
-  - mistral: Mistral.UploadFile (purpose=ocr) -> Mistral.FileUrl (signed URL) -> image_url for images (vision models such as pixtral-12b); PDFs add Mistral.Ocr (mistral-ocr-latest) and inject the extracted markdown in the prompt'
+  - mistral: Mistral.UploadFile (purpose=ocr) -> Mistral.FileUrl (signed URL) -> image_url for images (vision models such as ministral-14b-latest or mistral-medium-latest; the pixtral models are retired); PDFs add Mistral.Ocr (mistral-ocr-latest) and inject the extracted markdown in the prompt'
 ↓If_openai [steps.IfStep-1791566493053]: 
   comment: 'provider openai (default): without file → ChatCompletion (any OpenAI-compatible endpoint); with a file (image or PDF) → OpenAIResponses (Responses API, binary Files API upload, no base64).'
   condition: String(provider || 'openai').toLowerCase() == 'openai'
@@ -539,11 +539,11 @@ comment: |
   ↓api_key [variables.TestCaseVariable-1791795856419]: 
     value: fake-key
 ↓test_mistral_image [core.TestCase]: 
-  comment: 'provider=mistral + image file (binary Files API upload + signed URL vision, pixtral-12b): the model must read the word CIEL in tests/ciel.png.'
+  comment: 'provider=mistral + image file (binary Files API upload + signed URL vision, ministral-14b-latest, Mistral''s replacement for the retired pixtral-12b): the model must read the word CIEL in tests/ciel.png.'
   ↓provider [variables.TestCaseVariable-1791812876195]: 
     value: mistral
   ↓model [variables.TestCaseVariable-1791812876197]: 
-    value: pixtral-12b
+    value: ministral-14b-latest
   ↓prompt [variables.TestCaseVariable-1791812876199]: 
     value: Read the text in this image. Answer with the word only.
   ↓file [variables.TestCaseVariable-1791812876201]: 
