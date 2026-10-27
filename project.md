@@ -1,7 +1,8 @@
 
 # ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/core/images/project_color_16x16.png?raw=true "Project") lib_AIConnector
 
-Shared library that serves the modern chat completion APIs of all major AI providers.
+Shared library that serves the modern chat completion APIs of all major AI providers, and starts AgentRunner agent jobs (autonomous agents run in Kubernetes, see AgentRunner below).
+
 
 ## Recommended entry point: AIChat
 
@@ -52,20 +53,41 @@ Every provider uploads files in binary through the Convertigo HTTP connector tra
 - `OpenAIResponses` - OpenAI Responses API (`/v1/responses`) used when a file is attached (image or PDF): binary Files API upload then `input_image`/`input_file` with `file_id`. Default model `gpt-4o-mini`.
 - `AnthropicMessage` - Anthropic native Messages API. Default model `claude-sonnet-4-5`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files (PDF and images) go through the Anthropic Files API and are referenced by `file_id`.
 - `GeminiMessage` - Google Gemini through its OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`). Default model `gemini-2.5-flash`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files use the Gemini resumable Files API upload.
-- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Images: binary Files API upload + signed URL (vision models such as pixtral-12b); PDFs: OCR-extracted markdown (mistral-ocr-latest).
+- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Images: binary Files API upload + signed URL (vision models such as `ministral-14b-latest` or `mistral-medium-latest`; the pixtral models are retired); PDFs: OCR-extracted markdown (mistral-ocr-latest).
 
 Each sequence copies the provider response into its output via an XMLCopyStep.
+
+## AgentRunner: agent jobs
+
+AgentRunner runs autonomous AI agents (Mistral Vibe with a browser, a shell, document and vision tools) in Kubernetes, one isolated Job per task. A job is a doc in the `agentjobs` FullSync database (the `agentjobs` connector; the AgentRunner daemon watches the same CouchDB database), owned by the user who created it (`~c8oAcl`), so FullSync gives each user their own jobs only.
+
+The three sequences are Private and need an authenticated context: call them from your application's own sequence (`SequenceStep`), in the user's session, where you decide who may start agents, with which model and budget.
+
+| Sequence | Variables | Output |
+|---|---|---|
+| `AgentRunnerJob` | `prompt` (required), `api_key` (the client's LLM API key; empty = the `lib_AIConnector.agentrunner.api_key.secret` symbol), `api_key_name` (default `LITELLM_API_KEY`), `model` (catalog alias such as `glm` or `large4`; empty = cluster default), `max_price`, `max_turns`, `time_limit` (empty = cluster defaults), `scheduled_at` (ISO 8601, run later), `files` (multipart files given to the agent) | `{jobId, status: queued or scheduled, inputs}` |
+| `AgentRunnerJobStatus` | `jobId` | `{job: {jobId, status, createdAt, scheduledAt, startedAt, finishedAt, model, progress, finalMessage, error, costUsd, outputs}}` |
+| `AgentRunnerJobCancel` | `jobId` | `{jobId, status, cancelled}` |
+
+- Statuses: `queued` / `scheduled` -> `running` -> `succeeded`, `failed`, `stopped` (a limit was reached; the agent still writes what it has), or `cancelling` -> `cancelled`.
+- `progress` is live while the job runs: steps, tool calls, and the latest reasoning, messages and actions (`progress.history`). Poll `AgentRunnerJobStatus` every few seconds, or sync the doc with FullSync.
+- `files` are attached as `input/<name>` and found by the agent in its working directory; the files the agent produces are attachments `output/<name>` (listed in `job.outputs`).
+- The API key is encrypted by `EncryptAgentRunnerSecret` (AES-256-GCM) before it is stored: only the AgentRunner daemon can read it, and it hands it to that job's agent only.
+- A job of another user answers `job not found`, for both status and cancel.
+- Tests: `NR_AgentRunnerJob` (start with a file, status, cancel, isolation between two users; no LLM cost) and `NR_AgentRunnerJobLive` (a real job run to the end, a few cents). Both delete their test jobs.
 
 ## Symbols
 
 API keys are never stored in the project. Each provider reads its key from a symbol at runtime; pass `api_key` to override (for example for tests):
 
-| Symbol | Provider |
+| Symbol | Used by |
 |---|---|
 | `lib_AIConnector.openai_apikey.secret` | OpenAI (`ChatCompletion`) |
 | `lib_AIConnector.anthropic_apikey.secret` | Anthropic (`AnthropicMessage`) |
 | `lib_AIConnector.gemini_apikey.secret` | Google Gemini (`GeminiMessage`) |
 | `lib_AIConnector.mistral_apikey.secret` | Mistral (`MistralMessage`) |
+| `lib_AIConnector.agentrunner.key.secret` | AgentRunner encryption key, required: the `AGENTRUNNER_SECRET_KEY` of the cluster's `agentrunner-key` Secret (`EncryptAgentRunnerSecret`; or the `AGENTRUNNER_SECRET_KEY` environment variable of the server) |
+| `lib_AIConnector.agentrunner.api_key.secret` | AgentRunner default LLM API key, optional: used by `AgentRunnerJob` when `api_key` is empty |
 
 Set their values in the administration console.
 
@@ -81,6 +103,192 @@ see [readme](https://github.com/convertigo/c8oprj-lib-ai-connector/tree/master#r
 
 <details><summary><span style="color:DarkGoldenRod"><i>Connectors</i></span></summary><blockquote><p>
 
+
+<details><summary><b>agentjobs</b> : FullSync database of the AgentRunner jobs (CouchDB database agentjobs, named after this connector), watched by the AgentRunner daemon: one doc per agent job, owned by the user who created it (~c8oAcl)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/connectors/images/fullsyncconnector_color_16x16.png?raw=true "FullSyncConnector") agentjobs
+
+FullSync database of the AgentRunner jobs (CouchDB database agentjobs, named after this connector), watched by the AgentRunner daemon: one doc per agent job, owned by the user who created it (~c8oAcl).
+
+<details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
+
+
+<details><summary><b>CreateJob</b> : Creates a job doc from the JSON in _use_json_base (its _id included), owned by the authenticated user (~c8oAcl)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/couchdb/images/postdocument_color_16x16.png?raw=true "PostDocumentTransaction") CreateJob
+
+Creates a job doc from the JSON in _use_json_base (its _id included), owned by the authenticated user (~c8oAcl).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_json_base
+</td>
+<td>
+The whole job doc as a JSON string (holds the encrypted secrets only).
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>DeleteJob</b> : Deletes a job doc by id: used by the NR_AgentRunnerJob* test sequences to remove their test jobs</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/couchdb/images/deletedocument_color_16x16.png?raw=true "DeleteDocumentTransaction") DeleteJob
+
+Deletes a job doc by id: used by the NR_AgentRunnerJob* test sequences to remove their test jobs.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_docid
+</td>
+<td>
+Job doc id.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>GetJob</b> : Reads one job doc by id (no ACL filtering server side: callers check the owner)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/couchdb/images/getdocument_color_16x16.png?raw=true "GetDocumentTransaction") GetJob
+
+Reads one job doc by id (no ACL filtering server side: callers check the owner).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_docid
+</td>
+<td>
+Job doc id.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>PutInput</b> : Attaches an uploaded file to a job doc (as input/<name>, fetched into the agent's working directory)</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/couchdb/images/putdocumentattachment_color_16x16.png?raw=true "PutDocumentAttachmentTransaction") PutInput
+
+Attaches an uploaded file to a job doc (as input/<name>, fetched into the agent's working directory).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_attcontent_type
+</td>
+<td>
+MIME type of the file.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_attname
+</td>
+<td>
+Attachment name, input/<file name>.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_attpath
+</td>
+<td>
+Path of the uploaded file on the server.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_docid
+</td>
+<td>
+Job doc id.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>UpdateJob</b> : Merges the fields of the JSON in _use_json_base (with its _id) into an existing job doc, keeping its owner</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/couchdb/images/postdocument_color_16x16.png?raw=true "PostDocumentTransaction") UpdateJob
+
+Merges the fields of the JSON in _use_json_base (with its _id) into an existing job doc, keeping its owner.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;_use_json_base
+</td>
+<td>
+JSON string with the _id of the job doc and the fields to change.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+</p></blockquote></details>
+</p></blockquote></details>
 
 <details><summary><b>AI</b> : OpenAI-compatible HTTP connector</summary><blockquote><p>
 
@@ -780,6 +988,176 @@ does nothing
 <details><summary><span style="color:DarkGoldenRod"><i>Sequences</i></span></summary><blockquote><p>
 
 
+<details><summary><b>AgentRunnerJob</b> : Starts an AgentRunner agent job: writes a job doc in the agentjobs FullSync database, owned by the authenticated user, with the LLM API key encrypted for the AgentRunner daemon (EncryptAgentRunnerSecret) and the uploaded files attached as input/<name>; the daemon then runs it in its own Kubernetes Job</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") AgentRunnerJob
+
+Starts an AgentRunner agent job: writes a job doc in the agentjobs FullSync database, owned by the authenticated user, with the LLM API key encrypted for the AgentRunner daemon (EncryptAgentRunnerSecret) and the uploaded files attached as input/<name>; the daemon then runs it in its own Kubernetes Job.
+
+Variables: prompt (required), api_key (the client's LLM API key; empty = the default key of the lib_AIConnector.agentrunner.api_key.secret symbol; never stored in clear), api_key_name (name of the job secret, default LITELLM_API_KEY, the name the cluster requires), model (catalog alias, e.g. glm or large4; empty = cluster default), max_price / max_turns / time_limit (empty = cluster defaults), scheduled_at (ISO 8601: run later instead of now), files (uploaded files given to the agent).
+
+Output: {jobId, status (queued or scheduled), inputs}. Follow it with AgentRunnerJobStatus, stop it with AgentRunnerJobCancel.
+
+Private and authenticated: call it from an application sequence (SequenceStep) in the user's session, which sets the job owner.
+
+Symbols: lib_AIConnector.agentrunner.key.secret (the AgentRunner encryption key, required, see EncryptAgentRunnerSecret) and lib_AIConnector.agentrunner.api_key.secret (optional default LLM API key).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;api_key
+</td>
+<td>
+The client's LLM API key (e.g. LiteLLM gateway key). Empty = the default key of the lib_AIConnector.agentrunner.api_key.secret symbol. Encrypted before it is stored, masked everywhere.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;api_key_name
+</td>
+<td>
+Name of the job secret holding the key, i.e. the environment variable the cluster's LLM provider reads. Default LITELLM_API_KEY; set it only if the cluster expects another name.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/multivaluedvariable_color_16x16.png?raw=true "  alt="RequestableMultiValuedVariable" >&nbsp;files
+</td>
+<td>
+Files given to the agent: attached to the job doc as input/<name>, found by the agent in its working directory. Multipart upload; in tests, paths relative to the projects directory.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;max_price
+</td>
+<td>
+Budget in $ for the job. Empty = cluster default.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;max_turns
+</td>
+<td>
+Maximum agent turns. Empty = cluster default.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;model
+</td>
+<td>
+Model alias of the AgentRunner catalog (glm, large4...). Empty = cluster default.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;prompt
+</td>
+<td>
+What the agent must do. Required.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;scheduled_at
+</td>
+<td>
+ISO 8601 date-time (UTC if no offset) to run the job later. Empty = run now.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;time_limit
+</td>
+<td>
+Time limit in seconds. Empty = cluster default.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>AgentRunnerJobCancel</b> : Cancels an AgentRunner job of the authenticated user: sets it to cancelling; the daemon stops its Kubernetes Job (the agent keeps what it did: partial result and files) or, if it had not started, sets it to cancelled</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") AgentRunnerJobCancel
+
+Cancels an AgentRunner job of the authenticated user: sets it to cancelling; the daemon stops its Kubernetes Job (the agent keeps what it did: partial result and files) or, if it had not started, sets it to cancelled. A finished job is left as it is. A job of another user answers 'job not found'.
+
+Variable: jobId.
+
+Output: {jobId, status (cancelling, or the unchanged final status), cancelled (true when the cancel was requested)}.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;jobId
+</td>
+<td>
+Id of the job, as returned by AgentRunnerJob.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>AgentRunnerJobStatus</b> : State of an AgentRunner job of the authenticated user: status, live progress (steps, latest reasoning, messages and actions), final message, error, cost and the output files the agent produced</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") AgentRunnerJobStatus
+
+State of an AgentRunner job of the authenticated user: status, live progress (steps, latest reasoning, messages and actions), final message, error, cost and the output files the agent produced. A job of another user answers 'job not found'.
+
+Variable: jobId (from AgentRunnerJob).
+
+Output: {job: {jobId, status, createdAt, scheduledAt, startedAt, finishedAt, model, progress, finalMessage, error, costUsd, outputs: [{name, size, contentType}]}}. Status: draft, queued, scheduled, running, succeeded, failed, stopped (a limit was reached), cancelling, cancelled.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;jobId
+</td>
+<td>
+Id of the job, as returned by AgentRunnerJob.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
 <details><summary><b>AIChat</b> : Hat (facade) sequence: routes a chat completion request to the right provider connector</summary><blockquote><p>
 
 
@@ -797,7 +1175,7 @@ Files API architecture: every upload goes through the Convertigo HTTP connector 
 - openai: AI.UploadFile purpose=vision/user_data -> file_id in input_image/input_file (Responses API)
 - anthropic: Anthropic.UploadFile (files API beta) -> file_id in the chat message (PDF and images)
 - gemini: Gemini.UploadStart + Gemini.UploadFile (resumable upload, x-goog headers) -> file URI in the chat message
-- mistral: Mistral.UploadFile (purpose=ocr) -> Mistral.FileUrl (signed URL) -> image_url for images (vision models such as pixtral-12b); PDFs add Mistral.Ocr (mistral-ocr-latest) and inject the extracted markdown in the prompt
+- mistral: Mistral.UploadFile (purpose=ocr) -> Mistral.FileUrl (signed URL) -> image_url for images (vision models such as ministral-14b-latest or mistral-medium-latest; the pixtral models are retired); PDFs add Mistral.Ocr (mistral-ocr-latest) and inject the extracted markdown in the prompt
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -1080,6 +1458,46 @@ Optional system prompt (role / instructions) prepended to the user prompt
 </td>
 <td>
 Sampling temperature, decimal 0 to 2 (provider dependent). Empty = provider default.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>EncryptAgentRunnerSecret</b> : Encrypts a secret (for example the client's own LLM API key) for an AgentRunner job doc</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") EncryptAgentRunnerSecret
+
+Encrypts a secret (for example the client's own LLM API key) for an AgentRunner job doc.
+
+The result goes into the job doc's "secrets" field, for example "secrets": {"LITELLM_API_KEY": <envelope>}. Only the AgentRunner daemon can decrypt it; it hands the plain value to that job's agent only.
+
+Variable: value (required, masked everywhere).
+
+Key: the AgentRunner AES-256 key (32 bytes, base64), the AGENTRUNNER_SECRET_KEY of the agentrunner-key Kubernetes Secret, from the lib_AIConnector.agentrunner.key.secret symbol (administration console; the only AgentRunner symbol), else from the AGENTRUNNER_SECRET_KEY environment variable of the Convertigo server. The key never leaves the server.
+
+Format: AES-256-GCM, random 12-byte IV, ct = ciphertext followed by the 16-byte tag, both base64.
+
+Output: {"envelope": {"$enc": "A256GCM", "iv": "...", "ct": "..."}}. Call it from the server-side sequence that creates the job doc; never expose it to clients.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;value
+</td>
+<td>
+The secret to encrypt, for example the client's LLM API key. Required. Masked in logs, Studio, platform and project file.
 </td>
 </tr>
 </table>
@@ -1388,6 +1806,22 @@ Sampling temperature (optional, 0-2).
 </tr>
 </table>
 
+</p></blockquote></details>
+
+<details><summary><b>NR_AgentRunnerJob</b> : Non-regression suite for AgentRunnerJob / AgentRunnerJobStatus / AgentRunnerJobCancel: starts a job scheduled in 2099 (never run, no LLM cost) with an input file, reads it, cancels it, and checks that another user can neither read nor cancel it</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") NR_AgentRunnerJob
+
+Non-regression suite for AgentRunnerJob / AgentRunnerJobStatus / AgentRunnerJobCancel: starts a job scheduled in 2099 (never run, no LLM cost) with an input file, reads it, cancels it, and checks that another user can neither read nor cancel it. Reports PASS/FAIL per check. Needs the lib_AIConnector.agentrunner.key.secret symbol (AgentRunner key).
+</p></blockquote></details>
+
+<details><summary><b>NR_AgentRunnerJobLive</b> : End-to-end test of AgentRunnerJob on a live AgentRunner cluster: starts a small real job with the default LLM key (lib_AIConnector</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") NR_AgentRunnerJobLive
+
+End-to-end test of AgentRunnerJob on a live AgentRunner cluster: starts a small real job with the default LLM key (lib_AIConnector.agentrunner.api_key.secret symbol, api_key left empty), polls AgentRunnerJobStatus every 3 s until it ends (5 min at most), then checks status, answer, model and cost. Costs a few cents of LLM usage. Reports PASS/FAIL per check and the job's progress history.
 </p></blockquote></details>
 
 <details><summary><b>NR_AIChat</b> : Non-regression suite for AIChat: runs the validated test matrix (provider routing, system prompt, temperature, max_tokens truncation, model override) and reports PASS/FAIL per check</summary><blockquote><p>

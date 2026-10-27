@@ -3,7 +3,8 @@
 
 # lib_AIConnector
 
-Shared library that serves the modern chat completion APIs of all major AI providers.
+Shared library that serves the modern chat completion APIs of all major AI providers, and starts AgentRunner agent jobs (autonomous agents run in Kubernetes, see AgentRunner below).
+
 
 ## Recommended entry point: AIChat
 
@@ -54,20 +55,41 @@ Every provider uploads files in binary through the Convertigo HTTP connector tra
 - `OpenAIResponses` - OpenAI Responses API (`/v1/responses`) used when a file is attached (image or PDF): binary Files API upload then `input_image`/`input_file` with `file_id`. Default model `gpt-4o-mini`.
 - `AnthropicMessage` - Anthropic native Messages API. Default model `claude-sonnet-4-5`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files (PDF and images) go through the Anthropic Files API and are referenced by `file_id`.
 - `GeminiMessage` - Google Gemini through its OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`). Default model `gemini-2.5-flash`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Files use the Gemini resumable Files API upload.
-- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Images: binary Files API upload + signed URL (vision models such as pixtral-12b); PDFs: OCR-extracted markdown (mistral-ocr-latest).
+- `MistralMessage` - Mistral AI chat completions (`api.mistral.ai/v1/chat/completions`). Default model `mistral-large-latest`. Variables: prompt, model, system, temperature, max_tokens, api_key, file, file_type. Images: binary Files API upload + signed URL (vision models such as `ministral-14b-latest` or `mistral-medium-latest`; the pixtral models are retired); PDFs: OCR-extracted markdown (mistral-ocr-latest).
 
 Each sequence copies the provider response into its output via an XMLCopyStep.
+
+## AgentRunner: agent jobs
+
+AgentRunner runs autonomous AI agents (Mistral Vibe with a browser, a shell, document and vision tools) in Kubernetes, one isolated Job per task. A job is a doc in the `agentjobs` FullSync database (the `agentjobs` connector; the AgentRunner daemon watches the same CouchDB database), owned by the user who created it (`~c8oAcl`), so FullSync gives each user their own jobs only.
+
+The three sequences are Private and need an authenticated context: call them from your application's own sequence (`SequenceStep`), in the user's session, where you decide who may start agents, with which model and budget.
+
+| Sequence | Variables | Output |
+|---|---|---|
+| `AgentRunnerJob` | `prompt` (required), `api_key` (the client's LLM API key; empty = the `lib_AIConnector.agentrunner.api_key.secret` symbol), `api_key_name` (default `LITELLM_API_KEY`), `model` (catalog alias such as `glm` or `large4`; empty = cluster default), `max_price`, `max_turns`, `time_limit` (empty = cluster defaults), `scheduled_at` (ISO 8601, run later), `files` (multipart files given to the agent) | `{jobId, status: queued or scheduled, inputs}` |
+| `AgentRunnerJobStatus` | `jobId` | `{job: {jobId, status, createdAt, scheduledAt, startedAt, finishedAt, model, progress, finalMessage, error, costUsd, outputs}}` |
+| `AgentRunnerJobCancel` | `jobId` | `{jobId, status, cancelled}` |
+
+- Statuses: `queued` / `scheduled` -> `running` -> `succeeded`, `failed`, `stopped` (a limit was reached; the agent still writes what it has), or `cancelling` -> `cancelled`.
+- `progress` is live while the job runs: steps, tool calls, and the latest reasoning, messages and actions (`progress.history`). Poll `AgentRunnerJobStatus` every few seconds, or sync the doc with FullSync.
+- `files` are attached as `input/<name>` and found by the agent in its working directory; the files the agent produces are attachments `output/<name>` (listed in `job.outputs`).
+- The API key is encrypted by `EncryptAgentRunnerSecret` (AES-256-GCM) before it is stored: only the AgentRunner daemon can read it, and it hands it to that job's agent only.
+- A job of another user answers `job not found`, for both status and cancel.
+- Tests: `NR_AgentRunnerJob` (start with a file, status, cancel, isolation between two users; no LLM cost) and `NR_AgentRunnerJobLive` (a real job run to the end, a few cents). Both delete their test jobs.
 
 ## Symbols
 
 API keys are never stored in the project. Each provider reads its key from a symbol at runtime; pass `api_key` to override (for example for tests):
 
-| Symbol | Provider |
+| Symbol | Used by |
 |---|---|
 | `lib_AIConnector.openai_apikey.secret` | OpenAI (`ChatCompletion`) |
 | `lib_AIConnector.anthropic_apikey.secret` | Anthropic (`AnthropicMessage`) |
 | `lib_AIConnector.gemini_apikey.secret` | Google Gemini (`GeminiMessage`) |
 | `lib_AIConnector.mistral_apikey.secret` | Mistral (`MistralMessage`) |
+| `lib_AIConnector.agentrunner.key.secret` | AgentRunner encryption key, required: the `AGENTRUNNER_SECRET_KEY` of the cluster's `agentrunner-key` Secret (`EncryptAgentRunnerSecret`; or the `AGENTRUNNER_SECRET_KEY` environment variable of the server) |
+| `lib_AIConnector.agentrunner.api_key.secret` | AgentRunner default LLM API key, optional: used by `AgentRunnerJob` when `api_key` is empty |
 
 Set their values in the administration console.
 

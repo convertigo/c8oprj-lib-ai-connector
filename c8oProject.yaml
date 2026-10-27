@@ -3,6 +3,7 @@
   comment: |
     'Shared library that serves the modern chat completion APIs of all major AI providers, and starts AgentRunner agent jobs (autonomous agents run in Kubernetes, see AgentRunner below).
     
+    
     ## Recommended entry point: AIChat
     
     `AIChat` is the hat (facade) sequence: it routes a chat completion request to the right provider sequence based on the `provider` variable.
